@@ -11,6 +11,9 @@
 <link rel="manifest" href="manifest.webmanifest" />
 <meta name="apple-mobile-web-app-title" content="Next Level" />
 <meta name="theme-color" content="#000000" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=swap" />
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
@@ -19,6 +22,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   html, body { margin: 0; padding: 0; background: #0B1410; }
+  body { color: #EFE9DD; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
 </style>
 </head>
 <body>
@@ -763,6 +767,46 @@ async function safeGet(key) {
 // straight back to "0" the instant you clear it, making it impossible to
 // type a fresh number). Only commits a number up to the parent on change
 // (while it parses) and falls back to `min` if left empty on blur.
+// ---------- Empty states + loading placeholders ----------
+// EmptyState: friendly icon, one line on what to do first, and (optionally) a
+// button that does it. LoadingSkeleton: soft grey shimmer boxes while data loads.
+function nlFocus(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) { el.scrollIntoView(); }
+  try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+}
+function EmptyState({ icon, text, action, onAction }) {
+  return (
+    <div className="nl-empty">
+      <div className="nl-empty-icon" aria-hidden="true">{icon}</div>
+      <p className="nl-empty-text">{text}</p>
+      {action && onAction && (
+        <button type="button" className="nl-btn" onClick={onAction}>
+          {action}
+        </button>
+      )}
+    </div>
+  );
+}
+function LoadingSkeleton({ label = "Loading", rows = 3, pad, height }) {
+  return (
+    <div className="nl-skel-wrap" role="status" aria-busy="true" aria-label={label} style={pad ? { padding: 20 } : null}>
+      {height ? (
+        <div className="nl-skel" style={{ height }} />
+      ) : (
+        <>
+          <div className="nl-skel nl-skel-title" />
+          {Array.from({ length: rows }).map((_, i) => (
+            <div key={i} className="nl-skel nl-skel-line" style={{ width: i === rows - 1 ? "60%" : "100%" }} />
+          ))}
+          <div className="nl-skel nl-skel-block" />
+        </>
+      )}
+    </div>
+  );
+}
+
 function NumberField({ label, value, onChange, min = 0 }) {
   const [text, setText] = useState(value === undefined || value === null ? "" : String(value));
   const [focused, setFocused] = useState(false);
@@ -2270,7 +2314,7 @@ function CoachBot() {
             maxHeight: "70vh",
             background: "#16261C",
             border: "1px solid #2A4433",
-            borderRadius: 12,
+            borderRadius: 14,
             display: "flex",
             flexDirection: "column",
             marginBottom: 12,
@@ -2278,7 +2322,7 @@ function CoachBot() {
             boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
           }}
         >
-          <div style={{ background: "#C8531E", color: "#0F1F17", padding: "10px 14px", fontWeight: 700, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ background: "#3B82F6", color: "#0F1F17", padding: "10px 14px", fontWeight: 700, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span>Coach Bot</span>
             <button
               onClick={() => setOpen(false)}
@@ -2343,7 +2387,7 @@ function CoachBot() {
                 flex: 1,
                 background: "#0F1F17",
                 border: "1px solid #2A4433",
-                borderRadius: 8,
+                borderRadius: 10,
                 padding: "8px 10px",
                 color: "#EFE9DD",
                 fontSize: 13,
@@ -2352,9 +2396,9 @@ function CoachBot() {
             <button
               onClick={() => send()}
               style={{
-                background: "#C8531E",
+                background: "#3B82F6",
                 border: "none",
-                borderRadius: 8,
+                borderRadius: 10,
                 padding: "8px 14px",
                 color: "#0F1F17",
                 fontWeight: 700,
@@ -2372,7 +2416,7 @@ function CoachBot() {
           width: 56,
           height: 56,
           borderRadius: "50%",
-          background: "#C8531E",
+          background: "#3B82F6",
           color: "#0F1F17",
           border: "none",
           fontSize: 24,
@@ -2564,7 +2608,7 @@ function StreakPage({ profile }) {
   if (!all) {
     return (
       <div className="about-page">
-        <p className="hint">Loading your streak…</p>
+        <LoadingSkeleton label="Loading your streak" />
       </div>
     );
   }
@@ -2623,6 +2667,7 @@ function StreakPage({ profile }) {
           step={props.step}
           maxLength={props.maxLength}
           placeholder={props.placeholder}
+          id={props.id}
           value={form[key]}
           onChange={(e) => setForm({ ...form, [key]: e.target.value })}
         />
@@ -2643,7 +2688,7 @@ function StreakPage({ profile }) {
       </div>
       <div className="grid">
         {field("Date", "date", { type: "date", inputMode: "none" })}
-        {field("How long (mins)", "mins", { placeholder: "60" })}
+        {field("How long (mins)", "mins", { placeholder: "60", id: "nl-sk-mins" })}
         {logType === "training" && field("What I worked on", "work", { type: "text", inputMode: "text", maxLength: 150, placeholder: "e.g. cover drive, yorkers", full: true })}
         {logType === "fitness" && field("Distance (km)", "km", { inputMode: "decimal", step: "0.1", placeholder: "5" })}
         {logType === "fitness" && field("Reps", "reps", { placeholder: "10" })}
@@ -2652,7 +2697,7 @@ function StreakPage({ profile }) {
         <span>How it went</span>
         <textarea className="sk-notes" maxLength={1000} placeholder="What went well, what to work on next time" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
       </label>
-      {err && <p className="hint" style={{ color: "#C8531E" }}>{err}</p>}
+      {err && <p className="hint" style={{ color: "#F87171" }}>{err}</p>}
       <button className="save-btn" onClick={submit}>
         Save {STREAK_TYPES[logType].toLowerCase()}
       </button>
@@ -2717,13 +2762,13 @@ function StreakPage({ profile }) {
         </div>
         <div className="card">
           <h2>Past streaks</h2>
-          {past.length === 0 && <p className="hint">None yet.</p>}
+          {past.length === 0 && <EmptyState icon="🏁" text="Finished streaks show here. Log a session today to start one." action="Log a session" onAction={() => setView("log")} />}
           {past.map((r) => (
             <div className="sk-item" key={r.start}>
               <div className="sk-item-hd">
                 <strong>
                   🔥 {r.days.length} day{r.days.length === 1 ? "" : "s"}
-                  {r.days.length === st.best && <span style={{ color: "#E8A15C" }}> · Best</span>}
+                  {r.days.length === st.best && <span style={{ color: "#60A5FA" }}> · Best</span>}
                 </strong>
                 <span className="hint" style={{ margin: 0 }}>
                   {skShort(r.start)}
@@ -2748,7 +2793,7 @@ function StreakPage({ profile }) {
           {list.length} {STREAK_TYPES[histType].toLowerCase()} session{list.length === 1 ? "" : "s"} · {skHrs(sumMins(list))} hours
           {histType === "fitness" && km ? ` · ${Math.round(km * 10) / 10} km` : ""}
         </p>
-        {list.length === 0 && <p className="hint">No {STREAK_TYPES[histType].toLowerCase()} sessions yet.</p>}
+        {list.length === 0 && <EmptyState icon="📜" text={`No ${STREAK_TYPES[histType].toLowerCase()} sessions yet — log your first one.`} action={`Log ${STREAK_TYPES[histType].toLowerCase()}`} onAction={() => { setLogType(histType); setView("log"); }} />}
         {list.map(sessionRow)}
       </div>
     );
@@ -2761,7 +2806,11 @@ function StreakPage({ profile }) {
         {todayLabel} · <b>{st.todayCount}</b> session{st.todayCount === 1 ? "" : "s"} today{st.todayCount >= 2 ? " ×2" : ""}
       </p>
       {tally}
-      {streakBar}
+      {all.length ? streakBar : (
+        <div className="card">
+          <EmptyState icon="🔥" text="No streak yet — log your first session to light it up." action="Log my first session" onAction={() => { setView("log"); setTimeout(() => nlFocus("nl-sk-mins"), 60); }} />
+        </div>
+      )}
       <div className="entry-filter-strip">
         <button type="button" className={view === "log" ? "active" : ""} onClick={() => setView("log")}>
           ➕ Log a session
@@ -2895,9 +2944,9 @@ function RatingRow({ label, value, onChange }) {
             style={{
               width: 28,
               height: 28,
-              borderRadius: 6,
+              borderRadius: 10,
               border: "1px solid #2A4433",
-              background: value === n ? "#C8531E" : "transparent",
+              background: value === n ? "#3B82F6" : "transparent",
               color: value === n ? "#0F1F17" : "#9FB3A4",
               fontSize: 12,
               fontWeight: value === n ? 700 : 400,
@@ -2926,7 +2975,7 @@ function SelfAssessment({ ratings, onChange }) {
 }
 
 // ---------- Simple self-contained SVG charts (no external library) ----------
-function SimpleBarChart({ data, height = 140, color = "#C8531E", suffix = "" }) {
+function SimpleBarChart({ data, height = 140, color = "#3B82F6", suffix = "" }) {
   if (!data || data.length === 0) return null;
   const width = 320;
   const max = Math.max(1, ...data.map((d) => Math.abs(d.value)));
@@ -2954,7 +3003,7 @@ function SimpleBarChart({ data, height = 140, color = "#C8531E", suffix = "" }) 
   );
 }
 
-function SimpleLineChart({ data, height = 140, color = "#C8531E", suffix = "" }) {
+function SimpleLineChart({ data, height = 140, color = "#3B82F6", suffix = "" }) {
   if (!data || data.length === 0) return null;
   const width = 320;
   const values = data.map((d) => d.value);
@@ -3136,7 +3185,7 @@ function PerMatchAveragesCard({ fields, totals, count }) {
             <span style={{ color: "#9FB3A4" }}>{Number.isInteger(r.avg) ? r.avg : r.avg.toFixed(1)}</span>
           </div>
           <div style={{ height: 7, background: "#1F3527", borderRadius: 4 }}>
-            <div style={{ width: `${(r.avg / max) * 100}%`, height: "100%", background: "#C8531E", borderRadius: 4 }} />
+            <div style={{ width: `${(r.avg / max) * 100}%`, height: "100%", background: "#3B82F6", borderRadius: 4 }} />
           </div>
         </div>
       ))}
@@ -3365,7 +3414,7 @@ function LogScopePicker({ needsChoice, kind, onKind, matchCount, trainingCount, 
       <button
         type="button"
         onClick={() => onKind(k)}
-        style={{ flex: 1, minHeight: 120, background: "#16241B", border: "2px solid #2A4433", borderRadius: 12, padding: "18px 10px", cursor: "pointer", fontFamily: "inherit", color: "#EFE9DD" }}
+        style={{ flex: 1, minHeight: 120, background: "#16241B", border: "2px solid #2A4433", borderRadius: 14, padding: "18px 10px", cursor: "pointer", fontFamily: "inherit", color: "#EFE9DD" }}
       >
         <div style={{ fontSize: 26 }}>{icon}</div>
         <div style={{ fontWeight: 700, fontSize: 15, marginTop: 6 }}>{title}</div>
@@ -3399,13 +3448,13 @@ function LogScopePicker({ needsChoice, kind, onKind, matchCount, trainingCount, 
               style={{
                 flex: 1,
                 padding: "9px 0",
-                borderRadius: 8,
+                borderRadius: 10,
                 border: "none",
                 cursor: "pointer",
                 fontFamily: "inherit",
                 fontWeight: 600,
                 fontSize: 13,
-                background: kind === k ? "#C8531E" : "transparent",
+                background: kind === k ? "#3B82F6" : "transparent",
                 color: kind === k ? "#0F1F17" : "#9FB3A4",
               }}
             >
@@ -3890,7 +3939,7 @@ function VideoPickField({ file, onChange }) {
           <span style={{ flex: 1, color: "#EFE9DD", fontSize: 14 }}>
             ✅ {file.name || "Video"} <span style={{ color: "#7C9284" }}>· {fmtSize(file.size)}</span>
           </span>
-          <button type="button" onClick={() => onChange(null)} style={{ background: "transparent", border: "1px solid #2A4433", color: "#9FB3A4", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
+          <button type="button" onClick={() => onChange(null)} style={{ background: "transparent", border: "1px solid #2A4433", color: "#9FB3A4", borderRadius: 10, padding: "6px 12px", cursor: "pointer" }}>
             Remove
           </button>
         </div>
@@ -3957,7 +4006,7 @@ function SkeletonOverlay({ videoRef, frames }) {
   return <canvas ref={canvasRef} style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }} />;
 }
 
-const NOTE_INPUT = { background: "#0F1F17", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, padding: "10px 12px", fontSize: 14, fontFamily: "inherit" };
+const NOTE_INPUT = { background: "#0F1F17", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, padding: "10px 12px", fontSize: 14, fontFamily: "inherit" };
 
 // Watch the clip, add comments at moments, and run the technique analysis.
 function VideoCard({ entry, username, onAttach, onRemove, onAnalysed }) {
@@ -4092,7 +4141,7 @@ function VideoCard({ entry, username, onAttach, onRemove, onAnalysed }) {
       {missing ? (
         <p className="hint">This video is saved on the phone you added it from, so it can't play here. Your notes and analysis are still below.</p>
       ) : !src ? (
-        <p className="hint">Loading video…</p>
+        <LoadingSkeleton label="Loading video" height={200} />
       ) : (
         <div style={{ position: "relative", width: "100%", background: "#000", borderRadius: 10, overflow: "hidden" }}>
           <video ref={videoRef} src={src} controls playsInline preload="auto" muted style={{ width: "100%", display: "block" }} />
@@ -4122,8 +4171,8 @@ function VideoCard({ entry, username, onAttach, onRemove, onAnalysed }) {
           {skills[skillIdx] && <p className="hint">📹 Best results: {skills[skillIdx].film}</p>}
           {progress !== null ? (
             <div style={{ margin: "10px 0" }}>
-              <div style={{ height: 10, background: "#1F3527", borderRadius: 5, overflow: "hidden" }}>
-                <div style={{ width: `${Math.round(progress * 100)}%`, height: "100%", background: "#C8531E" }} />
+              <div style={{ height: 10, background: "#1F3527", borderRadius: 10, overflow: "hidden" }}>
+                <div style={{ width: `${Math.round(progress * 100)}%`, height: "100%", background: "#3B82F6" }} />
               </div>
               <p className="hint">Analysing your technique… {Math.round(progress * 100)}% (stays on your phone)</p>
             </div>
@@ -4152,7 +4201,7 @@ function VideoCard({ entry, username, onAttach, onRemove, onAnalysed }) {
               <span style={{ fontSize: 16 }}>{r.status === "good" ? "✅" : r.status === "ok" ? "🟡" : r.status === "bad" ? "🔴" : "⚪️"}</span>
               <span style={{ flex: 1, fontSize: 13.5, color: "#EFE9DD", lineHeight: 1.4 }}>{r.text}</span>
               {r.t !== undefined && !missing && (
-                <button type="button" onClick={() => jump(r.t)} style={{ background: "#1B3324", border: "1px solid #3A5C46", color: "#8FD9A0", borderRadius: 6, padding: "2px 8px", fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>
+                <button type="button" onClick={() => jump(r.t)} style={{ background: "#1B3324", border: "1px solid #3A5C46", color: "#8FD9A0", borderRadius: 10, padding: "2px 8px", fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>
                   📍 {fmtClock(r.t)}
                 </button>
               )}
@@ -4166,7 +4215,7 @@ function VideoCard({ entry, username, onAttach, onRemove, onAnalysed }) {
       {sortedNotes.length === 0 && <p className="hint">Pause on a key moment, tap 📍, then write what happened.</p>}
       {sortedNotes.map((n, i) => (
         <div key={i} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid #1F3527", alignItems: "flex-start" }}>
-          <button type="button" onClick={() => jump(n.t)} style={{ background: "#1B3324", border: "1px solid #3A5C46", color: "#8FD9A0", borderRadius: 6, padding: "2px 8px", fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>
+          <button type="button" onClick={() => jump(n.t)} style={{ background: "#1B3324", border: "1px solid #3A5C46", color: "#8FD9A0", borderRadius: 10, padding: "2px 8px", fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>
             {fmtClock(n.t)}
           </button>
           <span style={{ flex: 1, fontSize: 13.5, color: "#EFE9DD", lineHeight: 1.4 }}>{n.text}</span>
@@ -4204,7 +4253,7 @@ function VideoCard({ entry, username, onAttach, onRemove, onAnalysed }) {
           onClick={() => {
             if (window.confirm("Remove this video from the log? It will be deleted from this phone.")) onRemove();
           }}
-          style={{ marginTop: 12, background: "transparent", border: "1px solid #2A4433", color: "#9FB3A4", borderRadius: 8, padding: "8px 14px", cursor: "pointer" }}
+          style={{ marginTop: 12, background: "transparent", border: "1px solid #2A4433", color: "#9FB3A4", borderRadius: 10, padding: "8px 14px", cursor: "pointer" }}
         >
           Remove video
         </button>
@@ -4261,12 +4310,12 @@ function ReportForm({ team, onDone }) {
       </label>
       <label className="field" style={{ marginTop: 10 }}>
         <span>Anything else we should know? (optional)</span>
-        <textarea rows={3} value={details} onChange={(e) => setDetails(e.target.value)} style={{ width: "100%", background: "#0F1F17", border: "1px solid #2A4433", color: "#F5EFE2", borderRadius: 6, padding: 8, fontFamily: "inherit", fontSize: 14 }} />
+        <textarea rows={3} value={details} onChange={(e) => setDetails(e.target.value)} style={{ width: "100%", background: "#0F1F17", border: "1px solid #2A4433", color: "#F5EFE2", borderRadius: 10, padding: 8, fontFamily: "inherit", fontSize: 14 }} />
       </label>
-      {status && <p className="hint" style={{ color: "#C8531E" }}>{status}</p>}
+      {status && <p className="hint" style={{ color: "#F87171" }}>{status}</p>}
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
         <button className="save-btn" onClick={send}>Send Report</button>
-        <button type="button" onClick={onDone} style={{ background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}>
+        <button type="button" onClick={onDone} style={{ background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}>
           Cancel
         </button>
       </div>
@@ -4314,10 +4363,10 @@ function MyTeamCard({ profile }) {
             Coach: {team.coach || "—"} · {team.status === "member" ? "You're in this team" : team.status === "pending" ? "Waiting for the coach to accept you" : "Your request was declined"}
           </p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" onClick={leave} style={{ background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>
+            <button type="button" onClick={leave} style={{ background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, padding: "9px 14px", cursor: "pointer" }}>
               {team.status === "member" ? "Leave team" : "Cancel request"}
             </button>
-            <button type="button" onClick={() => setReporting(true)} style={{ background: "transparent", border: "1px solid #6B3A2A", color: "#F5B199", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>
+            <button type="button" onClick={() => setReporting(true)} style={{ background: "transparent", border: "1px solid #7F1D1D", color: "#FCA5A5", borderRadius: 10, padding: "9px 14px", cursor: "pointer" }}>
               ⚠️ Report this team or coach
             </button>
           </div>
@@ -4396,18 +4445,18 @@ function DeleteAccountCard({ profile, onDeleted }) {
     }
   }
   return (
-    <div className="card" style={{ border: "1px solid #6B3A2A" }}>
+    <div className="card" style={{ border: "1px solid #7F1D1D" }}>
       <h2>Delete Account</h2>
       {!open ? (
         <>
           <p className="hint">Permanently delete your Next Level account and everything in it, in every sport.</p>
-          <button type="button" onClick={() => setOpen(true)} style={{ background: "transparent", border: "1px solid #C8531E", color: "#F5B199", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}>
+          <button type="button" onClick={() => setOpen(true)} style={{ background: "transparent", border: "1px solid #3B82F6", color: "#FCA5A5", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}>
             Delete my account
           </button>
         </>
       ) : (
         <>
-          <p className="hint" style={{ color: "#F5B199" }}>
+          <p className="hint" style={{ color: "#FCA5A5" }}>
             This deletes your login, all your logs, goals, gym and nutrition data in every sport, any teams you coach, your messages to us, and videos on this phone. It can't be undone.
           </p>
           {online && (
@@ -4416,12 +4465,12 @@ function DeleteAccountCard({ profile, onDeleted }) {
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
             </label>
           )}
-          {error && <p className="hint" style={{ color: "#C8531E" }}>{error}</p>}
+          {error && <p className="hint" style={{ color: "#F87171" }}>{error}</p>}
           <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-            <button type="button" disabled={busy} onClick={confirmDelete} style={{ background: "#8A2E14", border: "none", color: "#FFF", borderRadius: 8, padding: "10px 18px", cursor: "pointer", fontWeight: 700 }}>
+            <button type="button" disabled={busy} onClick={confirmDelete} style={{ background: "#B91C1C", border: "none", color: "#FFF", borderRadius: 10, padding: "10px 18px", cursor: "pointer", fontWeight: 700 }}>
               {busy ? "Deleting…" : "Permanently delete"}
             </button>
-            <button type="button" disabled={busy} onClick={() => { setOpen(false); setPassword(""); setError(""); }} style={{ background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}>
+            <button type="button" disabled={busy} onClick={() => { setOpen(false); setPassword(""); setError(""); }} style={{ background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}>
               Cancel
             </button>
           </div>
@@ -4441,7 +4490,7 @@ function SuspendedScreen({ onLogout }) {
         <p className="hint">Your Next Level account has been suspended. If you think this is a mistake, contact us through the support page.</p>
         <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 12, flexWrap: "wrap" }}>
           <button type="button" className="save-btn" onClick={() => (window.location.href = "support.html")}>Contact support</button>
-          <button type="button" onClick={onLogout} style={{ background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}>
+          <button type="button" onClick={onLogout} style={{ background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}>
             Log out
           </button>
         </div>
@@ -4505,7 +4554,7 @@ function HelpPage() {
       setStatus("Couldn't send your reply — try again.");
     }
   }
-  const box = { width: "100%", background: "#0F1F17", border: "1px solid #2A4433", color: "#F5EFE2", borderRadius: 6, padding: 8, fontFamily: "inherit", fontSize: 14 };
+  const box = { width: "100%", background: "#0F1F17", border: "1px solid #2A4433", color: "#F5EFE2", borderRadius: 10, padding: 8, fontFamily: "inherit", fontSize: 14 };
   const fmt = (ms) => (ms ? new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "");
   return (
     <div className="about-page">
@@ -4514,7 +4563,7 @@ function HelpPage() {
       <div className="card">
         <label className="field">
           <span>Your message</span>
-          <textarea rows={5} value={message} onChange={(e) => setMessage(e.target.value)} style={box} />
+          <textarea id="nl-help-msg" rows={5} value={message} onChange={(e) => setMessage(e.target.value)} style={box} />
         </label>
         <button className="save-btn" style={{ marginTop: 12 }} onClick={send}>
           Send Message
@@ -4524,8 +4573,8 @@ function HelpPage() {
       </div>
       <div className="card">
         <h2>Your Messages</h2>
-        {!loaded && <p className="hint">Loading…</p>}
-        {loaded && tickets.length === 0 && <p className="hint">No messages yet.</p>}
+        {!loaded && <LoadingSkeleton label="Loading messages" rows={2} />}
+        {loaded && tickets.length === 0 && <EmptyState icon="💬" text="No messages yet. Got a question? Send it and our reply shows here." action="Write a message" onAction={() => nlFocus("nl-help-msg")} />}
         {tickets.map((t) => (
           <div key={t.id} style={{ borderTop: "1px solid #2A4433", paddingTop: 10, marginTop: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#9FB3A4" }}>
@@ -4536,7 +4585,7 @@ function HelpPage() {
             </div>
             <p style={{ color: "#DCE7DF", margin: "6px 0" }}>{t.message}</p>
             {(t.replies || []).map((r, i) => (
-              <div key={i} style={{ margin: "6px 0 6px " + (r.from === "admin" ? "0" : "24px"), background: r.from === "admin" ? "#1B3324" : "#0F1F17", border: "1px solid #2A4433", borderRadius: 8, padding: "8px 10px" }}>
+              <div key={i} style={{ margin: "6px 0 6px " + (r.from === "admin" ? "0" : "24px"), background: r.from === "admin" ? "#1B3324" : "#0F1F17", border: "1px solid #2A4433", borderRadius: 10, padding: "8px 10px" }}>
                 <div style={{ fontSize: 11, color: r.from === "admin" ? "#8FD9A0" : "#9FB3A4", fontWeight: 700 }}>{r.from === "admin" ? "Next Level team" : "You"} · {fmt(r.at)}</div>
                 <div style={{ color: "#EFE9DD", fontSize: 14, marginTop: 2, whiteSpace: "pre-line" }}>{r.text}</div>
               </div>
@@ -4599,13 +4648,13 @@ function LogStylePicker({ value, onChange, liveSub }) {
                 flex: 1,
                 minWidth: 0,
                 minHeight: 92,
-                borderRadius: 12,
+                borderRadius: 14,
                 padding: "10px 4px",
                 cursor: "pointer",
                 fontFamily: "inherit",
                 textAlign: "center",
                 background: on ? "#1B3324" : "#16241B",
-                border: "2px solid " + (on ? "#C8531E" : "#2A4433"),
+                border: "2px solid " + (on ? "#3B82F6" : "#2A4433"),
                 color: "#EFE9DD",
               }}
             >
@@ -4816,7 +4865,7 @@ function LiveMatchTally({ roleFields, moreFields, initial, onChange, onFinish, o
             type="button"
             className="tally-btn"
             onClick={() => tap(f.key)}
-            style={{ minHeight: 86, borderRadius: 12, border: "2px solid #2A4433", background: "#16241B", color: "#EFE9DD", cursor: "pointer", fontFamily: "inherit", padding: "8px 6px", touchAction: "manipulation" }}
+            style={{ minHeight: 86, borderRadius: 14, border: "2px solid #2A4433", background: "#16241B", color: "#EFE9DD", cursor: "pointer", fontFamily: "inherit", padding: "8px 6px", touchAction: "manipulation" }}
           >
             <div style={{ fontSize: 30, fontWeight: 800, color: "#F5EFE2", lineHeight: 1.1 }}>{entry[f.key]}</div>
             <div style={{ fontSize: 13, color: "#9FB3A4", marginTop: 4 }}>{f.label}</div>
@@ -4827,12 +4876,12 @@ function LiveMatchTally({ roleFields, moreFields, initial, onChange, onFinish, o
         <button
           type="button"
           onClick={() => setShowMore(!showMore)}
-          style={{ width: "100%", marginTop: 10, background: "transparent", border: "1px dashed #2A4433", color: "#9FB3A4", borderRadius: 8, padding: "10px", cursor: "pointer", fontFamily: "inherit" }}
+          style={{ width: "100%", marginTop: 10, background: "transparent", border: "1px dashed #2A4433", color: "#9FB3A4", borderRadius: 10, padding: "10px", cursor: "pointer", fontFamily: "inherit" }}
         >
           {showMore ? "Show just the key stats" : `＋ More stats (${extra.length})`}
         </button>
       )}
-      <button type="button" onClick={undo} disabled={history.length === 0} style={{ marginTop: 12, width: "100%", padding: "12px", borderRadius: 8, cursor: "pointer", fontFamily: "inherit", background: "#16241B", border: "1px solid #2A4433", color: "#EFE9DD", opacity: history.length === 0 ? 0.5 : 1 }}>
+      <button type="button" onClick={undo} disabled={history.length === 0} style={{ marginTop: 12, width: "100%", padding: "12px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", background: "#16241B", border: "1px solid #2A4433", color: "#EFE9DD", opacity: history.length === 0 ? 0.5 : 1 }}>
         ↩ Undo Last Tap
       </button>
       <button className="save-btn" style={{ marginTop: 12, width: "100%" }} onClick={() => onFinish(entry)}>
@@ -4842,7 +4891,7 @@ function LiveMatchTally({ roleFields, moreFields, initial, onChange, onFinish, o
         <button
           type="button"
           onClick={() => onCallOff(entry)}
-          style={{ marginTop: 10, background: "#4A2A1E", color: "#F5D9C8", border: "none", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}
+          style={{ marginTop: 10, background: "#4C1D24", color: "#FECACA", border: "none", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}
         >
           Call It — Stopped Mid-Round
         </button>
@@ -4850,7 +4899,7 @@ function LiveMatchTally({ roleFields, moreFields, initial, onChange, onFinish, o
       <button
         type="button"
         onClick={onCancel}
-        style={{ marginTop: 10, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}
+        style={{ marginTop: 10, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}
       >
         Cancel
       </button>
@@ -4900,7 +4949,7 @@ function RatingsAnalysisCard({ items }) {
 
       {!allSame && <h3 style={{ marginTop: 14, marginBottom: 6 }}>Not as good — worth working on</h3>}
       {shownWeaknesses.map((d) => (
-        <div key={d.key} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#F5B199", marginBottom: 4 }}>
+        <div key={d.key} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#FCA5A5", marginBottom: 4 }}>
           <span>{d.label}</span>
           <span>{d.avg.toFixed(1)}/10</span>
         </div>
@@ -4957,6 +5006,7 @@ function FocusGoalsPanel({
           <input
             type="text"
             placeholder={CRICKET_UI.goalExample}
+            id="nl-goal-input"
             value={newSelfGoal}
             onChange={(e) => onNewSelfGoalChange(e.target.value)}
           />
@@ -4964,6 +5014,7 @@ function FocusGoalsPanel({
             Add Goal
           </button>
         </div>
+        {goals.length === 0 && <EmptyState icon="🎯" text="No goals yet — write one above and tap Add Goal." action="Write my first goal" onAction={() => nlFocus("nl-goal-input")} />}
         {selfGoals.length > 0 && (
           <div className="entry-list">
             {selfGoals.map((g) => (
@@ -5081,7 +5132,7 @@ function GoalCompletionFlash({ texts, onDismiss }) {
           background: "transparent",
           border: "1px solid #3D8A4E",
           color: "#DFF3E4",
-          borderRadius: 8,
+          borderRadius: 10,
           padding: "6px 14px",
           cursor: "pointer",
         }}
@@ -5267,7 +5318,7 @@ function SeasonPanel({ season, items, onEnd, onYearGroupChange, onRemove }) {
         <p className="hint">
           {items.length} {items.length === 1 ? "entry" : "entries"} logged so far.
         </p>
-        <button className="save-btn" style={{ background: "#4A2A1E", color: "#F5D9C8" }} onClick={onEnd}>
+        <button className="save-btn" style={{ background: "#4C1D24", color: "#FECACA" }} onClick={onEnd}>
           End Season
         </button>
       </div>
@@ -5303,7 +5354,7 @@ function SeasonPanel({ season, items, onEnd, onYearGroupChange, onRemove }) {
 // its stats and the individual entries logged during it.
 // Training has no seasons, so its History tab is every training session,
 // newest first, with a filter by type and a Remove button on each.
-function TrainingHistoryPanel({ items, cats, onRemove }) {
+function TrainingHistoryPanel({ items, cats, onRemove, onLog }) {
   const [filter, setFilter] = useState("all");
   const labelOf = (k) => ((cats || []).find((c) => c.key === k) || {}).label || "Training";
   const types = [...new Set(items.map((i) => i.category || "matchPractice"))];
@@ -5322,7 +5373,7 @@ function TrainingHistoryPanel({ items, cats, onRemove }) {
           <Stat label="Sessions logged" value={items.length} />
           <Stat label="This week" value={thisWeek} />
         </div>
-        {items.length === 0 && <p className="hint">No training sessions yet — log one from the "Log a Score" tab and it'll appear here.</p>}
+        {items.length === 0 && <EmptyState icon="🎯" text="No training sessions yet — log one and it'll appear here." action="Log a session" onAction={onLog} />}
         {types.length > 1 && (
           <div className="entry-filter-strip" style={{ marginTop: 8 }}>
             <button type="button" className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>
@@ -5364,13 +5415,13 @@ function TrainingHistoryPanel({ items, cats, onRemove }) {
   );
 }
 
-function SeasonHistoryPanel({ seasons, items, onDelete }) {
+function SeasonHistoryPanel({ seasons, items, onDelete, onLog }) {
   const pastSeasons = seasons.filter((s) => s.endDate);
   return (
     <section>
       <div className="card">
         <h2>Season History</h2>
-        {pastSeasons.length === 0 && <p className="hint">No seasons finished yet — end your current season to see it here.</p>}
+        {pastSeasons.length === 0 && <EmptyState icon="📅" text="No finished seasons yet. Keep logging — when you end a season, its summary shows here." action="Log a score" onAction={onLog} />}
         {pastSeasons
           .slice()
           .reverse()
@@ -5450,7 +5501,7 @@ function SeasonSummary({ season, items, onDelete }) {
             <button
               type="button"
               onClick={onDelete}
-              style={{ marginTop: 14, background: "#4A2A1E", color: "#F5D9C8", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, cursor: "pointer" }}
+              style={{ marginTop: 14, background: "#4C1D24", color: "#FECACA", border: "none", borderRadius: 10, padding: "8px 14px", fontSize: 12, cursor: "pointer" }}
             >
               Delete This Season From History
             </button>
@@ -6071,9 +6122,7 @@ function GymApp({ onBack }) {
   if (!loaded) {
     return (
       <div className="app">
-        <p className="hint" style={{ padding: 20 }}>
-          Loading…
-        </p>
+        <LoadingSkeleton pad />
       </div>
     );
   }
@@ -6136,7 +6185,7 @@ function GymApp({ onBack }) {
             <div className="card">
               <h2>Saved Workouts</h2>
               <p className="hint">Go back to any workout you've logged before to see it again or repeat it.</p>
-              {workouts.length === 0 && <p className="hint">No workouts saved yet — log one from the "Log a Workout" tab.</p>}
+              {workouts.length === 0 && <EmptyState icon="🏋️" text="No workouts saved yet — log your first one to see it here." action="Log a workout" onAction={() => setTab("track")} />}
               {[...workouts].reverse().map((w) => (
                 <div key={w.id} style={{ borderTop: "1px solid #2A4433", paddingTop: 10, marginTop: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -6198,7 +6247,7 @@ function GymApp({ onBack }) {
                     key={s}
                     type="button"
                     className="sport-tile"
-                    style={workoutSplit === s ? { borderColor: "#C8531E", background: "#2A1F0F" } : {}}
+                    style={workoutSplit === s ? { borderColor: "#3B82F6", background: "#172554" } : {}}
                     onClick={() => setWorkoutSplit(s)}
                   >
                     <span className="sport-name">{s}</span>
@@ -6374,7 +6423,7 @@ function GymApp({ onBack }) {
               onSwitchGoal={updateGoal}
               onAddDetails={() => setTab("bodyweight")}
             />
-            {!analysis && <div className="empty">Log a workout or a body weight entry first — analysis appears here once you have data.</div>}
+            {!analysis && <EmptyState icon="📊" text="Log a workout or your body weight and your analysis appears here." action="Log a workout" onAction={() => setTab("track")} />}
             {analysis && (
               <div className="card">
                 <h2>Gym Analysis</h2>
@@ -6457,7 +6506,7 @@ function GymApp({ onBack }) {
                 ))}
               </div>
             )}
-            {activeTips.length === 0 && workouts.length === 0 && <div className="empty">Log a few workouts and more tips tailored to your training will appear here.</div>}
+            {activeTips.length === 0 && workouts.length === 0 && <EmptyState icon="💡" text="Log a few workouts and tips made for your training appear here." action="Log a workout" onAction={() => setTab("track")} />}
             {activeTips.map((tip, i) => {
               const drillList = typeof tip.drills === "function" ? tip.drills(analysis) : tip.drills;
               return (
@@ -6729,7 +6778,7 @@ function GoalWorkCard({ sport, goals, value, onChange }) {
                     background: on ? "#1B3324" : "transparent",
                     border: "1px solid " + (on ? "#5FBF7F" : "#2A4433"),
                     color: "#EFE9DD",
-                    borderRadius: 8,
+                    borderRadius: 10,
                     padding: "9px 11px",
                     fontSize: 13,
                     cursor: "pointer",
@@ -6749,7 +6798,7 @@ function GoalWorkCard({ sport, goals, value, onChange }) {
               value={value.notes}
               onChange={(e) => onChange({ ...value, notes: e.target.value })}
               placeholder="In your own words…"
-              style={{ width: "100%", background: "#0F1F17", border: "1px solid #2A4433", color: "#F5EFE2", borderRadius: 6, padding: 8, fontFamily: "inherit", fontSize: 13 }}
+              style={{ width: "100%", background: "#0F1F17", border: "1px solid #2A4433", color: "#F5EFE2", borderRadius: 10, padding: 8, fontFamily: "inherit", fontSize: 13 }}
             />
           </label>
         </>
@@ -7168,14 +7217,14 @@ function CoachDashboard({ onExit, profile, gymView }) {
     </div>
   );
 
-  if (!loaded) return shell(<p className="hint">Loading players…</p>);
+  if (!loaded) return shell(<LoadingSkeleton label="Loading players" />);
   if (!selectedPlayer && gymView) {
     return shell(
       <section>
         <div className="card">
           <h2>🏋️ Team Gym</h2>
           <p className="hint">What your players have shared from the gym. Tap a player to see every workout and their best lifts. You can't log gym sessions as a coach.</p>
-          {visible.length === 0 && <p className="hint">No players in your teams yet.</p>}
+          {visible.length === 0 && <EmptyState icon="👥" text="No players in your teams yet. Give players your team's join code — once you accept them, their shared workouts show here." />}
           <div className="entry-list">
             {visible.map((a) => {
               const g = (overview[a.username] || {}).gym || [];
@@ -7216,7 +7265,7 @@ function CoachDashboard({ onExit, profile, gymView }) {
                 </span>
               </div>
               {t.code && (
-                <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10, background: "#0F1F17", border: "1px dashed #3A5C46", borderRadius: 8, padding: "8px 12px", flexWrap: "wrap" }}>
+                <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10, background: "#0F1F17", border: "1px dashed #3A5C46", borderRadius: 10, padding: "8px 12px", flexWrap: "wrap" }}>
                   <span style={{ fontSize: 12, color: "#9FB3A4" }}>Join code</span>
                   <strong style={{ fontSize: 20, letterSpacing: 2, color: "#F5EFE2", fontFamily: "ui-monospace, Menlo, monospace" }}>{fmtTeamCode(t.code)}</strong>
                   <button
@@ -7233,7 +7282,7 @@ function CoachDashboard({ onExit, profile, gymView }) {
                 </div>
               )}
               {(t.pending || []).length > 0 && (
-                <div style={{ marginTop: 10, background: "#1B2A20", border: "1px solid #C8531E", borderRadius: 8, padding: 10 }}>
+                <div style={{ marginTop: 10, background: "#1B2A20", border: "1px solid #3B82F6", borderRadius: 10, padding: 10 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: "#E0B34A", marginBottom: 6 }}>
                     {(t.pending || []).length} request{(t.pending || []).length === 1 ? "" : "s"} to join
                   </div>
@@ -7247,7 +7296,7 @@ function CoachDashboard({ onExit, profile, gymView }) {
                         <button
                           type="button"
                           onClick={() => declineRequest(t.id, u)}
-                          style={{ background: "transparent", border: "1px solid #3A5C46", color: "#EFE9DD", borderRadius: 8, padding: "6px 12px", fontSize: 13, cursor: "pointer" }}
+                          style={{ background: "transparent", border: "1px solid #3A5C46", color: "#EFE9DD", borderRadius: 10, padding: "6px 12px", fontSize: 13, cursor: "pointer" }}
                         >
                           Decline
                         </button>
@@ -7281,7 +7330,7 @@ function CoachDashboard({ onExit, profile, gymView }) {
               Create Team
             </button>
           </div>
-          {teamError && <p className="hint" style={{ color: "#C8531E" }}>{teamError}</p>}
+          {teamError && <p className="hint" style={{ color: "#F87171" }}>{teamError}</p>}
         </div>
 
         <div className="card">
@@ -7300,7 +7349,7 @@ function CoachDashboard({ onExit, profile, gymView }) {
             </label>
           )}
           {visible.length === 0 && (
-            <p className="hint">No players in your teams yet. Once you accept a player's request they'll appear here — you'll only see the logs they mark "My team".</p>
+            <EmptyState icon="👥" text={'No players yet. Share your join code above — once you accept a player, they appear here (you only see logs they mark "My team").'} />
           )}
           <div className="entry-list">
             {visible.map((a) => (
@@ -7330,7 +7379,7 @@ function CoachDashboard({ onExit, profile, gymView }) {
     );
   }
 
-  if (!playerData) return shell(<p className="hint">Loading {selectedPlayer.username}'s stats…</p>);
+  if (!playerData) return shell(<LoadingSkeleton label="Loading stats" />);
 
   const positions = Object.keys(playerData.byPosition);
   const extras = playerData.extras || {};
@@ -7351,7 +7400,7 @@ function CoachDashboard({ onExit, profile, gymView }) {
         {teamOfPlayer(selectedPlayer.username) ? (
           <CoachGoalsEditor team={teamOfPlayer(selectedPlayer.username)} username={selectedPlayer.username} coachName={profile && profile.username} />
         ) : (
-          <div className="empty">This player isn't in one of your teams.</div>
+          <EmptyState icon="🔒" text="This player isn't in one of your teams." />
         )}
       </section>
     );
@@ -7368,7 +7417,7 @@ function CoachDashboard({ onExit, profile, gymView }) {
     return shell(
       <section>
         {tabStrip}
-        <div className="empty">{selectedPlayer.username} hasn't logged any cricket stats yet.</div>
+        <EmptyState icon="📭" text={`${selectedPlayer.username} hasn\'t logged any cricket stats yet.`} />
       </section>
     );
   }
@@ -7399,7 +7448,7 @@ function CoachDashboard({ onExit, profile, gymView }) {
         </div>
       )}
 
-      {!analysis && <div className="empty">No match stats at {selectedPos} yet — only training sessions.</div>}
+      {!analysis && <EmptyState icon="📊" text={`No match stats at ${selectedPos} yet — only training sessions.`} />}
       {analysis && (
         <div className="card">
           <h2>{selectedPos} Analysis</h2>
@@ -7625,7 +7674,7 @@ function CoachGoalsEditor({ team, username, coachName }) {
     if (!window.confirm("Remove this goal? It'll disappear from the player's app too.")) return;
     save((goals || []).filter((g) => g.id !== id));
   }
-  if (!goals) return <p className="hint">Loading goals…</p>;
+  if (!goals) return <LoadingSkeleton label="Loading goals" rows={2} />;
   const open = goals.filter((g) => !g.completed);
   const done = goals.filter((g) => g.completed);
   return (
@@ -7639,11 +7688,11 @@ function CoachGoalsEditor({ team, username, coachName }) {
             Add Goal
           </button>
         </div>
-        {err && <p className="hint" style={{ color: "#C8531E" }}>{err}</p>}
+        {err && <p className="hint" style={{ color: "#F87171" }}>{err}</p>}
       </div>
       <div className="card">
         <h2>Working on ({open.length})</h2>
-        {open.length === 0 && <p className="hint">No open goals — add one above.</p>}
+        {open.length === 0 && <EmptyState icon="🎯" text="No open goals — add one above." />}
         <div className="entry-list">
           {open.map((g) => (
             <div className="entry-row" key={g.id}>
@@ -7691,9 +7740,7 @@ const COACH_EXTRA_TABS = [
 function CoachExtraView({ kind, items, name }) {
   const list = items || [];
   const none = (what) => (
-    <div className="empty">
-      {name} hasn't shared any {what} with the team yet. Players choose "My team" when they want you to see it.
-    </div>
+    <EmptyState icon="📭" text={`${name} hasn't shared any ${what} with the team yet. Players choose "My team" when they want you to see it.`} />
   );
   if (kind === "plan") {
     if (!list.length) return none("weekly plans");
@@ -7921,7 +7968,7 @@ function LogForPicker({ value, onChange, team, onJoinTeam, title }) {
           flex: 1,
           textAlign: "left",
           background: on ? "#1B3324" : "transparent",
-          border: "2px solid " + (on ? "#C8531E" : "#2A4433"),
+          border: "2px solid " + (on ? "#3B82F6" : "#2A4433"),
           borderRadius: 10,
           padding: "12px 12px",
           cursor: disabled ? "not-allowed" : "pointer",
@@ -8656,9 +8703,7 @@ function CricketApp({ onBack, profile, onProfileChange }) {
   if (!loaded) {
     return (
       <div className="app">
-        <p className="hint" style={{ padding: 20 }}>
-          Loading…
-        </p>
+        <LoadingSkeleton pad />
       </div>
     );
   }
@@ -8684,8 +8729,8 @@ function CricketApp({ onBack, profile, onProfileChange }) {
             minWidth: 0,
             textAlign: "center",
             background: on ? "#1B3324" : "#16241B",
-            border: "2px solid " + (on ? "#C8531E" : "#2A4433"),
-            borderRadius: 12,
+            border: "2px solid " + (on ? "#3B82F6" : "#2A4433"),
+            borderRadius: 14,
             padding: "16px 6px",
             cursor: "pointer",
             fontFamily: "inherit",
@@ -8736,7 +8781,7 @@ function CricketApp({ onBack, profile, onProfileChange }) {
                 autoFocus
               />
             </label>
-            {teamJoinError && <p className="hint" style={{ color: "#C8531E" }}>{teamJoinError}</p>}
+            {teamJoinError && <p className="hint" style={{ color: "#F87171" }}>{teamJoinError}</p>}
             <button className="save-btn" style={{ marginTop: 14, width: "100%" }} onClick={requestToJoin}>
               Ask to Join
             </button>
@@ -8756,7 +8801,7 @@ function CricketApp({ onBack, profile, onProfileChange }) {
           </button>
           <div className="home-header">
             <h1>Cricket</h1>
-            <div style={{ background: "#1B2A20", border: "2px solid #C8531E", borderRadius: 12, padding: "14px 16px", marginTop: 8 }}>
+            <div style={{ background: "#1B2A20", border: "2px solid #3B82F6", borderRadius: 14, padding: "14px 16px", marginTop: 8 }}>
               <div style={{ fontSize: 20, fontWeight: 800, color: "#F5EFE2" }}>⭐ Pick your main position</div>
               <div style={{ fontSize: 13, color: "#9FB3A4", marginTop: 4 }}>The position you play most. You can change it anytime in Settings.</div>
             </div>
@@ -8782,7 +8827,7 @@ function CricketApp({ onBack, profile, onProfileChange }) {
         </button>
         <div className="home-header">
           <h1>{mainPosGroup}</h1>
-          <div style={{ background: "#1B2A20", border: "2px solid #C8531E", borderRadius: 12, padding: "14px 16px", marginTop: 8 }}>
+          <div style={{ background: "#1B2A20", border: "2px solid #3B82F6", borderRadius: 14, padding: "14px 16px", marginTop: 8 }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: "#F5EFE2" }}>⭐ Which is your main position?</div>
             <div style={{ fontSize: 13, color: "#9FB3A4", marginTop: 4 }}>Tap the one you play most.</div>
           </div>
@@ -8810,12 +8855,12 @@ function CricketApp({ onBack, profile, onProfileChange }) {
         </div>
         <div
           className="card"
-          style={{ border: "2px solid #C8531E", background: "#1B2A20", textAlign: "center", padding: "26px 20px" }}
+          style={{ border: "2px solid #3B82F6", background: "#1B2A20", textAlign: "center", padding: "26px 20px" }}
         >
           <div style={{ fontSize: 12, letterSpacing: 1.2, textTransform: "uppercase", color: "#E0B34A", fontWeight: 700 }}>
             Your main position
           </div>
-          <div style={{ fontSize: 30, fontWeight: 800, color: "#F5EFE2", margin: "8px 0 18px", fontFamily: "Georgia, serif" }}>
+          <div style={{ fontSize: 30, fontWeight: 800, color: "#F5EFE2", margin: "8px 0 18px", fontFamily: "var(--nl-font-head)" }}>
             {profile.mainPosition}
           </div>
           <button className="save-btn" style={{ width: "100%", fontSize: 16, padding: "14px 18px" }} onClick={chooseMainPosition}>
@@ -8824,7 +8869,7 @@ function CricketApp({ onBack, profile, onProfileChange }) {
         </div>
         <button
           onClick={() => setPickingOtherPosition(true)}
-          style={{ width: "100%", marginTop: 4, background: "transparent", border: "1px solid #3A5C46", color: "#EFE9DD", borderRadius: 8, padding: "13px 18px", cursor: "pointer", fontFamily: "inherit", fontSize: 14 }}
+          style={{ width: "100%", marginTop: 4, background: "transparent", border: "1px solid #3A5C46", color: "#EFE9DD", borderRadius: 10, padding: "13px 18px", cursor: "pointer", fontFamily: "inherit", fontSize: 14 }}
         >
           Choose a Different Position
         </button>
@@ -8888,9 +8933,7 @@ function CricketApp({ onBack, profile, onProfileChange }) {
   if (!roleLoaded || !draft || !meta) {
     return (
       <div className="app">
-        <p className="hint" style={{ padding: 20 }}>
-          Loading…
-        </p>
+        <LoadingSkeleton pad />
       </div>
     );
   }
@@ -8996,6 +9039,7 @@ function CricketApp({ onBack, profile, onProfileChange }) {
         )}
         {tab === "history" && mode === "training" && (
           <TrainingHistoryPanel
+            onLog={() => setTab("track")}
             items={entries
               .filter((e) => e.mode === "training")
               .map((e) => ({ id: e.id, date: e.date, category: e.category, summary: cricketEntrySummary(e) }))}
@@ -9005,6 +9049,7 @@ function CricketApp({ onBack, profile, onProfileChange }) {
         )}
         {tab === "history" && mode !== "training" && (
           <SeasonHistoryPanel
+            onLog={() => setTab("track")}
             seasons={seasons}
             items={entries.map((e) => ({
               date: e.date,
@@ -9232,13 +9277,13 @@ function CricketApp({ onBack, profile, onProfileChange }) {
                         style={{
                           flex: 1,
                           padding: "9px 0",
-                          borderRadius: 8,
+                          borderRadius: 10,
                           border: "none",
                           cursor: "pointer",
                           fontFamily: "inherit",
                           fontWeight: 600,
                           fontSize: 14,
-                          background: fieldGroupTab === gi ? "#C8531E" : "transparent",
+                          background: fieldGroupTab === gi ? "#3B82F6" : "transparent",
                           color: fieldGroupTab === gi ? "#0F1F17" : "#9FB3A4",
                         }}
                       >
@@ -9259,7 +9304,7 @@ function CricketApp({ onBack, profile, onProfileChange }) {
                   <button
                     type="button"
                     onClick={() => setShowAllStats(!showAllStats)}
-                    style={{ width: "100%", margin: "4px 0 12px", background: "transparent", border: "1px dashed #2A4433", color: "#9FB3A4", borderRadius: 8, padding: "10px", cursor: "pointer", fontFamily: "inherit" }}
+                    style={{ width: "100%", margin: "4px 0 12px", background: "transparent", border: "1px dashed #2A4433", color: "#9FB3A4", borderRadius: 10, padding: "10px", cursor: "pointer", fontFamily: "inherit" }}
                   >
                     {showAllStats ? "Show just the key stats" : `＋ More stats (${moreFields.length})`}
                   </button>
@@ -9271,7 +9316,7 @@ function CricketApp({ onBack, profile, onProfileChange }) {
                   <button
                     type="button"
                     onClick={cancelRound}
-                    style={{ marginTop: 10, background: "transparent", border: "1px solid #4A2A1E", color: "#D9A98D", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}
+                    style={{ marginTop: 10, background: "transparent", border: "1px solid #4C1D24", color: "#FCA5A5", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}
                   >
                     Cancel This Round
                   </button>
@@ -9288,7 +9333,7 @@ function CricketApp({ onBack, profile, onProfileChange }) {
                   <button
                     type="button"
                     onClick={cancelRound}
-                    style={{ marginTop: 10, background: "transparent", border: "1px solid #4A2A1E", color: "#D9A98D", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}
+                    style={{ marginTop: 10, background: "transparent", border: "1px solid #4C1D24", color: "#FCA5A5", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}
                   >
                     Cancel This Round
                   </button>
@@ -9379,7 +9424,7 @@ function CricketApp({ onBack, profile, onProfileChange }) {
               onFilter={setAnalysisEntryFilter}
               labelFor={logTabLabel}
             />
-            {!needsKindChoice && !analysis && !statEntries.some((e) => e.areaRatings) && <div className="empty">Log some stats first — analysis appears here once you have data.</div>}
+            {!needsKindChoice && !analysis && !statEntries.some((e) => e.areaRatings) && <EmptyState icon="📊" text="Log your first score and your analysis appears here." action="Log a score" onAction={() => setTab("track")} />}
             {!needsKindChoice && analysis && (
               <div className="card">
                 <h2>{scopeLabel} Analysis</h2>
@@ -9485,9 +9530,9 @@ function CricketApp({ onBack, profile, onProfileChange }) {
                 </ul>
               </div>
             )}
-            {!needsKindChoice && !analysis && !statEntries.some((e) => e.areaRatings) && <div className="empty">Log something first — drills for anything your analysis flags will appear here.</div>}
+            {!needsKindChoice && !analysis && !statEntries.some((e) => e.areaRatings) && <EmptyState icon="🎯" text="Log a score first — drills for anything your analysis flags appear here." action="Log a score" onAction={() => setTab("track")} />}
             {!needsKindChoice && analysis && tipCards.length === 0 && (
-              <div className="empty">Nothing flagged in this log — everything's looking good. Keep it up.</div>
+              <EmptyState icon="✅" text="Nothing flagged in this log — everything's looking good. Keep it up." />
             )}
             {!needsKindChoice && <TipCards cards={tipCards} />}
             {!needsKindChoice && videoTipCards(focusEntry).length > 0 && (
@@ -9509,7 +9554,7 @@ function PlanChip({ label, active, onClick }) {
       type="button"
       onClick={onClick}
       style={{
-        background: active ? "#C8531E" : "#0F1F17",
+        background: active ? "#3B82F6" : "#0F1F17",
         color: active ? "#0F1F17" : "#9FB3A4",
         border: "1px solid #2A4433",
         borderRadius: 20,
@@ -9625,7 +9670,7 @@ function SettingsPage({ onNavigate, onLogout }) {
             }}
           >
             <span style={{ fontSize: 22 }}>🚪</span>
-            <span style={{ flex: 1, color: "#C8531E", fontSize: 15, fontWeight: 600 }}>Log Out</span>
+            <span style={{ flex: 1, color: "#60A5FA", fontSize: 15, fontWeight: 600 }}>Log Out</span>
           </button>
         </div>
       </div>
@@ -9654,7 +9699,7 @@ const TIER_META = {
   silver: { label: "Silver", color: "#B8C4C2", icon: "🥈" },
   gold: { label: "Gold", color: "#E8B923", icon: "🥇" },
   platinum: { label: "Platinum", color: "#8FD9E0", icon: "💎" },
-  legendary: { label: "Legendary", color: "#C8531E", icon: "🏆" },
+  legendary: { label: "Legendary", color: "#60A5FA", icon: "🏆" },
 };
 
 const SPORT_LABELS = { cricket: "Cricket", gym: "Gym" };
@@ -9903,7 +9948,7 @@ function PBFlash({ items, onDismiss }) {
       <button
         type="button"
         onClick={onDismiss}
-        style={{ marginTop: 10, background: "transparent", border: "1px solid #E8B923", color: "#F5D97A", borderRadius: 8, padding: "6px 14px", cursor: "pointer" }}
+        style={{ marginTop: 10, background: "transparent", border: "1px solid #E8B923", color: "#F5D97A", borderRadius: 10, padding: "6px 14px", cursor: "pointer" }}
       >
         Dismiss
       </button>
@@ -9929,7 +9974,7 @@ function TrophyFlash({ trophies, onDismiss }) {
       <button
         type="button"
         onClick={onDismiss}
-        style={{ marginTop: 10, background: "transparent", border: "1px solid #E8B923", color: "#F5D97A", borderRadius: 8, padding: "6px 14px", cursor: "pointer" }}
+        style={{ marginTop: 10, background: "transparent", border: "1px solid #E8B923", color: "#F5D97A", borderRadius: 10, padding: "6px 14px", cursor: "pointer" }}
       >
         Dismiss
       </button>
@@ -9939,7 +9984,7 @@ function TrophyFlash({ trophies, onDismiss }) {
 
 // The "Collection" page — a global trophy cabinet showing every trophy in the
 // game, which ones are unlocked (with the date), and which are still locked.
-function AchievementsPage() {
+function AchievementsPage({ onLog }) {
   const [stats, setStats] = useState(emptyAchievementStats());
   const [unlocked, setUnlocked] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -9967,7 +10012,7 @@ function AchievementsPage() {
   if (!loaded) {
     return (
       <div className="about-page">
-        <p className="hint">Loading…</p>
+        <LoadingSkeleton />
       </div>
     );
   }
@@ -9997,6 +10042,12 @@ function AchievementsPage() {
         }}
         team={trophyTeam}
       />
+
+      {unlockedCount === 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <EmptyState icon="🏆" text="No trophies yet — log your first session to start unlocking them." action="Log a session" onAction={onLog} />
+        </div>
+      )}
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
         {tiers.map((t) => (
@@ -10133,7 +10184,7 @@ function AccountSettingsPage({ onProfileChange }) {
   if (!loaded) {
     return (
       <div className="about-page">
-        <p className="hint">Loading…</p>
+        <LoadingSkeleton />
       </div>
     );
   }
@@ -10156,7 +10207,7 @@ function AccountSettingsPage({ onProfileChange }) {
           </div>
           <button
             onClick={() => setPickingPosition(false)}
-            style={{ marginTop: 16, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}
+            style={{ marginTop: 16, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}
           >
             Cancel
           </button>
@@ -10183,7 +10234,7 @@ function AccountSettingsPage({ onProfileChange }) {
         </div>
         <button
           onClick={() => setPosition(null)}
-          style={{ marginTop: 16, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}
+          style={{ marginTop: 16, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}
         >
           Back
         </button>
@@ -10200,7 +10251,7 @@ function AccountSettingsPage({ onProfileChange }) {
           <span>Email address</span>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoCapitalize="none" />
         </label>
-        {emailError && <p className="hint" style={{ color: "#C8531E" }}>{emailError}</p>}
+        {emailError && <p className="hint" style={{ color: "#F87171" }}>{emailError}</p>}
         <label className="field" style={{ marginTop: 12 }}>
           <span>Nationality</span>
           <select value={nationality} onChange={(e) => setNationality(e.target.value)}>
@@ -10224,7 +10275,7 @@ function AccountSettingsPage({ onProfileChange }) {
                     type="button"
                     aria-pressed={sex === v}
                     onClick={() => setSex(v)}
-                    style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, fontSize: 13, background: sex === v ? "#C8531E" : "transparent", color: sex === v ? "#0F1F17" : "#9FB3A4" }}
+                    style={{ flex: 1, padding: "9px 0", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, fontSize: 13, background: sex === v ? "#3B82F6" : "transparent", color: sex === v ? "#0F1F17" : "#9FB3A4" }}
                   >
                     {label}
                   </button>
@@ -10315,7 +10366,7 @@ function ProfilePage() {
   if (!loaded) {
     return (
       <div className="about-page">
-        <p className="hint">Loading…</p>
+        <LoadingSkeleton />
       </div>
     );
   }
@@ -10503,7 +10554,7 @@ function WeeklyPlanner() {
   if (!loaded) {
     return (
       <div className="about-page">
-        <p className="hint">Loading…</p>
+        <LoadingSkeleton />
       </div>
     );
   }
@@ -10534,10 +10585,10 @@ function WeeklyPlanner() {
             onClick={() => setPlanMode("free")}
             style={{
               flex: 1,
-              background: planMode === "free" ? "#C8531E" : "transparent",
+              background: planMode === "free" ? "#3B82F6" : "transparent",
               color: planMode === "free" ? "#0F1F17" : "#EFE9DD",
-              border: "1px solid " + (planMode === "free" ? "#C8531E" : "#2A4433"),
-              borderRadius: 8,
+              border: "1px solid " + (planMode === "free" ? "#3B82F6" : "#2A4433"),
+              borderRadius: 10,
               padding: "10px 8px",
               fontSize: 13,
               fontWeight: 700,
@@ -10551,10 +10602,10 @@ function WeeklyPlanner() {
             onClick={() => setPlanMode("busy")}
             style={{
               flex: 1,
-              background: planMode === "busy" ? "#C8531E" : "transparent",
+              background: planMode === "busy" ? "#3B82F6" : "transparent",
               color: planMode === "busy" ? "#0F1F17" : "#EFE9DD",
-              border: "1px solid " + (planMode === "busy" ? "#C8531E" : "#2A4433"),
-              borderRadius: 8,
+              border: "1px solid " + (planMode === "busy" ? "#3B82F6" : "#2A4433"),
+              borderRadius: 10,
               padding: "10px 8px",
               fontSize: 13,
               fontWeight: 700,
@@ -10648,7 +10699,7 @@ function WeeklyPlanner() {
           {plan.length > 0 && (
             <button
               onClick={clearPlan}
-              style={{ marginLeft: 8, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}
+              style={{ marginLeft: 8, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}
             >
               Clear Plan
             </button>
@@ -11128,7 +11179,7 @@ function MealThumb({ id }) {
     };
   }, [id]);
   if (!src) return null;
-  return <img src={src} alt="Meal" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8, marginRight: 8, flexShrink: 0 }} />;
+  return <img src={src} alt="Meal" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 10, marginRight: 8, flexShrink: 0 }} />;
 }
 
 function MealPlateHelper({ draft, setDraft, photo, setPhoto, context }) {
@@ -11183,7 +11234,7 @@ function MealPlateHelper({ draft, setDraft, photo, setPhoto, context }) {
   const applied = items.length && Number(draft.calories) === tot.calories && Number(draft.protein) === tot.protein;
 
   return (
-    <div style={{ border: "1px solid #2A4433", borderRadius: 12, padding: 12, margin: "12px 0" }}>
+    <div style={{ border: "1px solid #2A4433", borderRadius: 14, padding: 12, margin: "12px 0" }}>
       <input
         ref={inputRef}
         type="file"
@@ -11206,7 +11257,7 @@ function MealPlateHelper({ draft, setDraft, photo, setPhoto, context }) {
             <span className="hint" style={{ margin: 0 }}>
               {seen === "looking" ? "🔎 Looking at your photo…" : seen === "failed" ? "Couldn't read the photo just now — add foods below." : Array.isArray(seen) && !seen.length ? "Couldn't spot the food — add it below." : "🔒 Stays on this phone only."}
             </span>
-            <button type="button" onClick={() => setPhoto(null)} style={{ background: "transparent", border: "1px solid #2A4433", color: "#9FB3A4", borderRadius: 8, padding: "4px 10px", cursor: "pointer" }}>
+            <button type="button" onClick={() => setPhoto(null)} style={{ background: "transparent", border: "1px solid #2A4433", color: "#9FB3A4", borderRadius: 10, padding: "4px 10px", cursor: "pointer" }}>
               Remove
             </button>
           </div>
@@ -11239,12 +11290,12 @@ function MealPlateHelper({ draft, setDraft, photo, setPhoto, context }) {
                 type="button"
                 aria-label={`${f.name} ${v}`}
                 onClick={() => setItems(items.map((x) => (x.key === it.key ? { ...x, size: v } : x)))}
-                style={{ width: 30, height: 30, borderRadius: 6, border: "1px solid #2A4433", background: it.size === v ? "#C8531E" : "transparent", color: it.size === v ? "#0F1F17" : "#9FB3A4", cursor: "pointer", fontWeight: 700, padding: 0 }}
+                style={{ width: 30, height: 30, borderRadius: 10, border: "1px solid #2A4433", background: it.size === v ? "#3B82F6" : "transparent", color: it.size === v ? "#0F1F17" : "#9FB3A4", cursor: "pointer", fontWeight: 700, padding: 0 }}
               >
                 {label}
               </button>
             ))}
-            <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setItems(items.filter((x) => x.key !== it.key))} style={{ width: 30, height: 30, borderRadius: 6, border: "1px solid #4A2A1E", background: "transparent", color: "#D9A98D", cursor: "pointer", padding: 0 }}>
+            <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setItems(items.filter((x) => x.key !== it.key))} style={{ width: 30, height: 30, borderRadius: 10, border: "1px solid #4C1D24", background: "transparent", color: "#FCA5A5", cursor: "pointer", padding: 0 }}>
               ✕
             </button>
           </div>
@@ -11504,7 +11555,7 @@ function RoutinePlayer({ routine, onClose, onDone }) {
   };
   const [name, secs, how] = routine.steps[i];
   return (
-    <div className="card" style={{ border: "2px solid #C8531E" }}>
+    <div className="card" style={{ border: "2px solid #3B82F6" }}>
       <p className="hint" style={{ margin: 0 }}>
         {routine.title} · step {i + 1} of {routine.steps.length}
       </p>
@@ -11521,22 +11572,22 @@ function RoutinePlayer({ routine, onClose, onDone }) {
           <p className="hint">{how}</p>
           <div style={{ fontSize: 48, fontWeight: 800, textAlign: "center", color: "#F5EFE2", margin: "8px 0" }}>{fmtClock(Math.max(0, left))}</div>
           <div style={{ height: 6, background: "#0F1F17", borderRadius: 3, overflow: "hidden", marginBottom: 12 }}>
-            <div style={{ width: `${(1 - Math.max(0, left) / secs) * 100}%`, height: "100%", background: "#C8531E" }} />
+            <div style={{ width: `${(1 - Math.max(0, left) / secs) * 100}%`, height: "100%", background: "#3B82F6" }} />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" onClick={() => go(i - 1)} disabled={i === 0} style={{ flex: 1, padding: 12, borderRadius: 8, background: "#16241B", border: "1px solid #2A4433", color: "#EFE9DD", cursor: "pointer" }}>
+            <button type="button" onClick={() => go(i - 1)} disabled={i === 0} style={{ flex: 1, padding: 12, borderRadius: 10, background: "#16241B", border: "1px solid #2A4433", color: "#EFE9DD", cursor: "pointer" }}>
               ◀ Back
             </button>
-            <button type="button" onClick={() => setRunning(!running)} style={{ flex: 1, padding: 12, borderRadius: 8, background: "#16241B", border: "1px solid #2A4433", color: "#EFE9DD", cursor: "pointer" }}>
+            <button type="button" onClick={() => setRunning(!running)} style={{ flex: 1, padding: 12, borderRadius: 10, background: "#16241B", border: "1px solid #2A4433", color: "#EFE9DD", cursor: "pointer" }}>
               {running ? "⏸ Pause" : "▶ Go"}
             </button>
-            <button type="button" onClick={() => (i === routine.steps.length - 1 ? (setLeft(0), setRunning(false)) : go(i + 1))} style={{ flex: 1, padding: 12, borderRadius: 8, background: "#16241B", border: "1px solid #2A4433", color: "#EFE9DD", cursor: "pointer" }}>
+            <button type="button" onClick={() => (i === routine.steps.length - 1 ? (setLeft(0), setRunning(false)) : go(i + 1))} style={{ flex: 1, padding: 12, borderRadius: 10, background: "#16241B", border: "1px solid #2A4433", color: "#EFE9DD", cursor: "pointer" }}>
               Next ▶
             </button>
           </div>
         </>
       )}
-      <button type="button" onClick={onClose} style={{ marginTop: 10, width: "100%", background: "transparent", border: "1px solid #2A4433", color: "#9FB3A4", borderRadius: 8, padding: 10, cursor: "pointer" }}>
+      <button type="button" onClick={onClose} style={{ marginTop: 10, width: "100%", background: "transparent", border: "1px solid #2A4433", color: "#9FB3A4", borderRadius: 10, padding: 10, cursor: "pointer" }}>
         Close
       </button>
     </div>
@@ -11552,7 +11603,7 @@ function RecoveryRating({ label, value, onChange, low, high }) {
       </div>
       <div style={{ display: "flex", gap: 4 }}>
         {Array.from({ length: 10 }, (_, k) => k + 1).map((n) => (
-          <button key={n} type="button" aria-label={`${label} ${n}`} onClick={() => onChange(n)} style={{ flex: 1, height: 32, borderRadius: 6, border: "1px solid #2A4433", background: value === n ? "#C8531E" : "transparent", color: value === n ? "#0F1F17" : "#9FB3A4", fontWeight: value === n ? 700 : 400, cursor: "pointer", padding: 0 }}>
+          <button key={n} type="button" aria-label={`${label} ${n}`} onClick={() => onChange(n)} style={{ flex: 1, height: 32, borderRadius: 10, border: "1px solid #2A4433", background: value === n ? "#3B82F6" : "transparent", color: value === n ? "#0F1F17" : "#9FB3A4", fontWeight: value === n ? 700 : 400, cursor: "pointer", padding: 0 }}>
             {n}
           </button>
         ))}
@@ -11659,7 +11710,7 @@ function RecoveryApp() {
   const todayCheck = checkins.find((c) => c.date === new Date().toISOString().slice(0, 10));
   const planRoutine = plan && plan.steps.length ? { key: "myplan", title: "Your recovery plan", steps: plan.steps.map((s) => [s.title, s.secs, s.how]) } : null;
 
-  if (!loaded) return <div className="about-page"><p className="hint">Loading…</p></div>;
+  if (!loaded) return <div className="about-page"><LoadingSkeleton /></div>;
 
   const chip = (active, label, onClick) => <PlanChip key={label} label={label} active={active} onClick={onClick} />;
 
@@ -11753,7 +11804,7 @@ function RecoveryApp() {
                       ▶ Start guided timer
                     </button>
                   )}
-                  <button type="button" onClick={() => markDone("Recovery plan")} style={{ width: "100%", marginTop: 8, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, padding: 10, cursor: "pointer" }}>
+                  <button type="button" onClick={() => markDone("Recovery plan")} style={{ width: "100%", marginTop: 8, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, padding: 10, cursor: "pointer" }}>
                     ✅ I've done it
                   </button>
                 </div>
@@ -12067,7 +12118,7 @@ function NutritionApp() {
   if (!loaded) {
     return (
       <div className="about-page">
-        <p className="hint">Loading…</p>
+        <LoadingSkeleton />
       </div>
     );
   }
@@ -12106,7 +12157,7 @@ function NutritionApp() {
           <button
             type="button"
             onClick={() => chooseContext(null)}
-            style={{ marginTop: 12, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}
+            style={{ marginTop: 12, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}
           >
             ← Change what you're fueling for
           </button>
@@ -12124,7 +12175,7 @@ function NutritionApp() {
         <button
           type="button"
           onClick={() => chooseContext(null)}
-          style={{ background: "transparent", border: "none", color: "#C8531E", cursor: "pointer", padding: 0, fontSize: 12 }}
+          style={{ background: "transparent", border: "none", color: "#60A5FA", cursor: "pointer", padding: 0, fontSize: 12 }}
         >
           (change)
         </button>
@@ -12314,7 +12365,7 @@ function NutritionApp() {
 
       {tab === "analysis" && (
         <>
-          {!analysis && <div className="empty">Log a meal first — analysis appears here once you have data.</div>}
+          {!analysis && <EmptyState icon="🍽️" text="Log your first meal and your analysis appears here." action="Log a meal" onAction={() => setTab("track")} />}
           {analysis && (
             <div className="card">
               <h2>Nutrition Analysis</h2>
@@ -12398,7 +12449,7 @@ function NutritionApp() {
           {nutritionPosition && positionGroupFor(nutritionPosition) && (
             <p className="hint" style={{ margin: "0 4px 12px" }}>Position tips for a {nutritionPosition} are on the Log a Meal tab.</p>
           )}
-          {activeTips.length === 0 && wants.length === 0 && <div className="empty">No specific tips flagged yet — tap what you want from your food on the Log a Meal tab, or log a few meals so the analysis can spot patterns.</div>}
+          {activeTips.length === 0 && wants.length === 0 && <EmptyState icon="💡" text="No specific tips flagged yet — tap what you want from your food on the Log a Meal tab, or log a few meals so the analysis can spot patterns." action="Log a meal" onAction={() => setTab("track")} />}
           {activeTips.map((tip, i) => (
             <div className="card" key={i}>
               <h2>{tip.title}</h2>
@@ -12609,7 +12660,7 @@ function PayPalSubscribeButton({ planId, onApproved, onError }) {
   return (
     <div>
       {state === "loading" && <p className="hint">Loading PayPal…</p>}
-      {state === "failed" && <p className="hint" style={{ color: "#C8531E" }}>PayPal couldn't load — check your internet and try again.</p>}
+      {state === "failed" && <p className="hint" style={{ color: "#F87171" }}>PayPal couldn't load — check your internet and try again.</p>}
       <div ref={ref} className="paypal-box" />
     </div>
   );
@@ -12661,7 +12712,7 @@ function Paywall({ profile, onDone, onLogout, ended }) {
               type="button"
               aria-pressed={period === v}
               onClick={() => setPeriod(v)}
-              style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, fontSize: 13, background: period === v ? "#C8531E" : "transparent", color: period === v ? "#0F1F17" : "#9FB3A4" }}
+              style={{ flex: 1, padding: "9px 0", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, fontSize: 13, background: period === v ? "#3B82F6" : "transparent", color: period === v ? "#0F1F17" : "#9FB3A4" }}
             >
               {l}
             </button>
@@ -12676,7 +12727,7 @@ function Paywall({ profile, onDone, onLogout, ended }) {
               type="button"
               aria-pressed={on}
               onClick={() => setPlan(k)}
-              style={{ display: "block", width: "100%", textAlign: "left", marginBottom: 8, padding: "12px 14px", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", background: on ? "#1B3324" : "#16241B", border: "2px solid " + (on ? "#C8531E" : "#2A4433"), color: "#EFE9DD" }}
+              style={{ display: "block", width: "100%", textAlign: "left", marginBottom: 8, padding: "12px 14px", borderRadius: 14, cursor: "pointer", fontFamily: "inherit", background: on ? "#1B3324" : "#16241B", border: "2px solid " + (on ? "#3B82F6" : "#2A4433"), color: "#EFE9DD" }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                 <strong style={{ fontSize: 15 }}>
@@ -12698,10 +12749,10 @@ function Paywall({ profile, onDone, onLogout, ended }) {
           ) : planId ? (
             <PayPalSubscribeButton key={planId} planId={planId} onApproved={approved} onError={() => setErr("PayPal had a problem — please try again.")} />
           ) : (
-            <p className="hint" style={{ color: "#C8531E" }}>This plan isn't available yet — please pick another or message us.</p>
+            <p className="hint" style={{ color: "#F87171" }}>This plan isn't available yet — please pick another or message us.</p>
           )}
         </div>
-        {err && <p className="hint" style={{ color: "#C8531E" }}>{err}</p>}
+        {err && <p className="hint" style={{ color: "#F87171" }}>{err}</p>}
         <p className="hint" style={{ fontSize: 12 }}>
           🔒 Your card or PayPal details are held by PayPal — Next Level never sees or stores them. Cancel any time in Settings → Subscription. Cancel in the first month and you pay nothing.
         </p>
@@ -12750,7 +12801,7 @@ function SubscriptionCard({ profile, onChanged }) {
             {s.status === "trial" ? `Free trial — first payment ${fmtDay(s.trialEnds)} unless you cancel before then.` : s.status === "active" ? "Active — paid through PayPal." : "Ended."}
           </p>
           {(s.status === "trial" || s.status === "active") && !s.free && (
-            <button type="button" onClick={() => cancel(s)} style={{ background: "transparent", border: "1px solid #4A2A1E", color: "#D9A98D", borderRadius: 8, padding: "10px 16px", cursor: "pointer" }}>
+            <button type="button" onClick={() => cancel(s)} style={{ background: "transparent", border: "1px solid #4C1D24", color: "#FCA5A5", borderRadius: 10, padding: "10px 16px", cursor: "pointer" }}>
               Cancel subscription
             </button>
           )}
@@ -13096,7 +13147,7 @@ function LoginGate({ onComplete, notice, prefill }) {
                 Log In
               </button>
               <button
-                style={{ flex: 1, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, cursor: "pointer" }}
+                style={{ flex: 1, background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, cursor: "pointer" }}
                 onClick={() => { setError(""); setMode("signup-account"); }}
               >
                 Sign Up
@@ -13139,12 +13190,12 @@ function LoginGate({ onComplete, notice, prefill }) {
                 onKeyDown={(e) => { if (e.key === "Enter") login(); }}
               />
             </label>
-            {error && <p className="hint" style={{ color: "#C8531E" }}>{error}</p>}
+            {error && <p className="hint" style={{ color: "#F87171" }}>{error}</p>}
             {info && <p className="hint" style={{ color: "#8FD9A0" }}>{info}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button
                 onClick={() => { setError(""); setInfo(""); setMode("choose"); }}
-                style={{ background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}
+                style={{ background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}
               >
                 Back
               </button>
@@ -13162,7 +13213,7 @@ function LoginGate({ onComplete, notice, prefill }) {
 
         {mode === "signup-account" && (
           <>
-            <div style={{ background: "#1B2A20", border: "2px solid #C8531E", borderRadius: 10, padding: "10px 12px", marginBottom: 12, color: "#F5EFE2", fontWeight: 700, textAlign: "center" }}>
+            <div style={{ background: "#1B2A20", border: "2px solid #3B82F6", borderRadius: 10, padding: "10px 12px", marginBottom: 12, color: "#F5EFE2", fontWeight: 700, textAlign: "center" }}>
               {CRICKET_UI.emoji} You're signing up for Cricket
             </div>
             <p className="hint">Are you signing up as a player or a coach?</p>
@@ -13179,13 +13230,13 @@ function LoginGate({ onComplete, notice, prefill }) {
                   style={{
                     flex: 1,
                     padding: "9px 0",
-                    borderRadius: 8,
+                    borderRadius: 10,
                     border: "none",
                     cursor: "pointer",
                     fontFamily: "inherit",
                     fontWeight: 600,
                     fontSize: 14,
-                    background: (draft.roles || {}).cricket === r ? "#C8531E" : "transparent",
+                    background: (draft.roles || {}).cricket === r ? "#3B82F6" : "transparent",
                     color: (draft.roles || {}).cricket === r ? "#0F1F17" : "#9FB3A4",
                   }}
                 >
@@ -13234,7 +13285,7 @@ function LoginGate({ onComplete, notice, prefill }) {
                     type="button"
                     aria-pressed={draft.sex === v}
                     onClick={() => setDraft({ ...draft, sex: v })}
-                    style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, fontSize: 13, background: draft.sex === v ? "#C8531E" : "transparent", color: draft.sex === v ? "#0F1F17" : "#9FB3A4" }}
+                    style={{ flex: 1, padding: "9px 0", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, fontSize: 13, background: draft.sex === v ? "#3B82F6" : "transparent", color: draft.sex === v ? "#0F1F17" : "#9FB3A4" }}
                   >
                     {label}
                   </button>
@@ -13242,12 +13293,12 @@ function LoginGate({ onComplete, notice, prefill }) {
               </div>
             </div>
 
-            {error && <p className="hint" style={{ color: "#C8531E" }}>{error}</p>}
+            {error && <p className="hint" style={{ color: "#F87171" }}>{error}</p>}
 
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button
                 onClick={() => { setError(""); setMode("choose"); }}
-                style={{ background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}
+                style={{ background: "transparent", border: "1px solid #2A4433", color: "#EFE9DD", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}
               >
                 Back
               </button>
@@ -13302,9 +13353,7 @@ function App() {
     return (
       <div style={{ minHeight: "100vh", background: "#0F1F17" }}>
         <style>{css}</style>
-        <p className="hint" style={{ padding: 20, color: "#EFE9DD" }}>
-          Loading…
-        </p>
+        <LoadingSkeleton pad />
       </div>
     );
   }
@@ -13479,7 +13528,7 @@ function App() {
       {!isCoach && page === "plan" && <WeeklyPlanner />}
       {!isCoach && page === "nutrition" && <NutritionApp />}
       {!isCoach && page === "recovery" && <RecoveryApp />}
-      {!isCoach && page === "trophies" && <AchievementsPage />}
+      {!isCoach && page === "trophies" && <AchievementsPage onLog={() => goPage("streak")} />}
       {page === "help" && <HelpPage />}
       {page === "settings" && <SettingsPage onNavigate={setPage} onLogout={handleLogout} />}
       <CoachBot />
@@ -13505,7 +13554,7 @@ const css = `
 }
 .home-header { text-align: center; margin-bottom: 40px; }
 .home-header h1 {
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--nl-font-head);
   font-size: 40px;
   margin: 0;
   color: #F5EFE2;
@@ -13541,7 +13590,7 @@ const css = `
   color: #9FB3A4;
   font-size: 12px;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: 10px;
   cursor: pointer;
   margin-right: 4px;
   flex-shrink: 0;
@@ -13555,8 +13604,8 @@ const css = `
 }
 .with-nav { padding-bottom: 84px; }
 .sub-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; max-width: 480px; margin: 0 auto; padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 0; }
-.sub-tabs button { background: #16261C; border: 1px solid #2A4433; color: #9FB3A4; padding: 10px 6px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
-.sub-tabs button.active { background: #C8531E; border-color: #C8531E; color: #0F1F17; }
+.sub-tabs button { background: #16261C; border: 1px solid #2A4433; color: #9FB3A4; padding: 10px 6px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.sub-tabs button.active { background: #3B82F6; border-color: #3B82F6; color: #0F1F17; }
 
 .bottom-nav.tight button { padding: 6px 1px; font-size: 10px; }
 .sk-page h1 { margin-bottom: 4px; }
@@ -13570,22 +13619,22 @@ const css = `
 .sk-bar.off .sk-flame { filter: grayscale(1); opacity: 0.45; }
 .sk-flame { font-size: 30px; line-height: 1; }
 .sk-now { color: #F5EFE2; font-weight: 600; font-size: 15px; }
-.sk-now b { font-family: Georgia, serif; font-size: 26px; color: #E8A15C; margin-right: 4px; }
-.sk-dbl { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #C8531E; color: #0F1F17; font-size: 12px; font-weight: 700; vertical-align: 3px; }
+.sk-now b { font-family: var(--nl-font-head); font-size: 26px; color: #60A5FA; margin-right: 4px; }
+.sk-dbl { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #3B82F6; color: #0F1F17; font-size: 12px; font-weight: 700; vertical-align: 3px; }
 .sk-best { text-align: center; font-size: 10px; color: #9FB3A4; text-transform: uppercase; letter-spacing: 0.4px; }
-.sk-best b { display: block; font-family: Georgia, serif; font-size: 22px; color: #E8A15C; }
+.sk-best b { display: block; font-family: var(--nl-font-head); font-size: 22px; color: #60A5FA; }
 .sk-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
 .sk-pick4 { grid-template-columns: repeat(4, 1fr); }
-.sk-pick button { background: #0F1F17; border: 1px solid #2A4433; color: #C8D6CC; border-radius: 8px; padding: 12px 2px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
-.sk-pick button.active { background: #C8531E; border-color: #C8531E; color: #0F1F17; }
-.sk-notes { width: 100%; min-height: 80px; resize: vertical; background: #0F1F17; border: 1px solid #2A4433; color: #F5EFE2; padding: 8px 10px; border-radius: 6px; font-size: 14px; font-family: inherit; }
+.sk-pick button { background: #0F1F17; border: 1px solid #2A4433; color: #C8D6CC; border-radius: 10px; padding: 12px 2px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.sk-pick button.active { background: #3B82F6; border-color: #3B82F6; color: #0F1F17; }
+.sk-notes { width: 100%; min-height: 80px; resize: vertical; background: #0F1F17; border: 1px solid #2A4433; color: #F5EFE2; padding: 8px 10px; border-radius: 10px; font-size: 14px; font-family: inherit; }
 .sk-item { display: grid; gap: 3px; padding: 10px 0; border-bottom: 1px solid #1F3527; }
 .sk-item:last-child { border-bottom: none; }
 .sk-item-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .sk-item-hd strong { color: #EFE9DD; font-size: 14px; }
 .sk-note { font-size: 13px; color: #DCE5DE; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 .sk-from { margin-left: 8px; font-size: 10px; padding: 1px 6px; border: 1px solid #3A5C46; border-radius: 999px; color: #9FB3A4; }
-.sk-del { justify-self: start; background: transparent; border: 1px solid #4A2A1E; color: #D9A98D; font-size: 11px; padding: 4px 8px; border-radius: 5px; cursor: pointer; }
+.sk-del { justify-self: start; background: transparent; border: 1px solid #4C1D24; color: #FCA5A5; font-size: 11px; padding: 4px 8px; border-radius: 10px; cursor: pointer; }
 .sk-toast { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: #F5EFE2; color: #0F1F17; padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 14px; z-index: 30; }
 
 .paypal-box { min-height: 50px; }
@@ -13617,13 +13666,13 @@ body.focus-mode .with-nav { padding-bottom: 0; }
   color: #9FB3A4;
   padding: 6px 8px;
   font-size: 11px;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-family: inherit;
 }
 .bottom-nav button .nav-icon { font-size: 18px; line-height: 1; }
 .bottom-nav button.active { background: #16261C; color: #F5EFE2; }
-.bottom-nav button.logout-btn { color: #C8531E; }
+.bottom-nav button.logout-btn { color: #60A5FA; }
 .bottom-nav button.logout-btn.active { background: transparent; }
 .about-page {
   max-width: 480px;
@@ -13632,16 +13681,16 @@ body.focus-mode .with-nav { padding-bottom: 0; }
   line-height: 1.7;
 }
 .about-page h1 {
-  font-family: Georgia, serif;
+  font-family: var(--nl-font-head);
   font-size: 28px;
   color: #F5EFE2;
   margin-bottom: 20px;
 }
 .about-page p { font-size: 14px; color: #DCE5DE; margin-bottom: 14px; }
 .about-tagline {
-  font-family: Georgia, serif;
+  font-family: var(--nl-font-head);
   font-style: italic;
-  color: #E8A15C;
+  color: #60A5FA;
   font-size: 16px;
   margin-top: 24px;
 }
@@ -13650,7 +13699,7 @@ body.focus-mode .with-nav { padding-bottom: 0; }
   margin: 0 auto;
   padding: 24px 20px 60px;
 }
-.help-page h2 { font-family: Georgia, serif; font-size: 22px; margin-bottom: 8px; }
+.help-page h2 { font-family: var(--nl-font-head); font-size: 22px; margin-bottom: 8px; }
 .help-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .chat-scroll {
   background: #16261C;
@@ -13678,7 +13727,7 @@ body.focus-mode .with-nav { padding-bottom: 0; }
 .thread-row {
   background: #16261C;
   border: 1px solid #2A4433;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 12px;
   text-align: left;
   color: #F5EFE2;
@@ -13711,19 +13760,19 @@ body.focus-mode .with-nav { padding-bottom: 0; }
 .crest {
   width: 48px;
   height: 48px;
-  border-radius: 8px;
-  background: #C8531E;
+  border-radius: 10px;
+  background: #3B82F6;
   color: #0F1F17;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: Georgia, serif;
+  font-family: var(--nl-font-head);
   font-weight: 700;
   font-size: 18px;
   flex-shrink: 0;
 }
 .header h1 {
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--nl-font-head);
   font-size: 26px;
   margin: 0;
   letter-spacing: 0.3px;
@@ -13814,10 +13863,10 @@ body.focus-mode .with-nav { padding-bottom: 0; }
 .save-banner {
   max-width: 720px;
   margin: 10px auto 0;
-  background: #4A2A1E;
-  color: #F5D9C8;
+  background: #4C1D24;
+  color: #FECACA;
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: 10px;
   font-size: 13px;
 }
 .main {
@@ -13833,7 +13882,7 @@ body.focus-mode .with-nav { padding-bottom: 0; }
   margin-top: 16px;
 }
 .card h2 {
-  font-family: Georgia, serif;
+  font-family: var(--nl-font-head);
   font-size: 20px;
   margin: 0 0 16px;
   color: #F5EFE2;
@@ -13873,12 +13922,12 @@ body.focus-mode .with-nav { padding-bottom: 0; }
   border: 1px solid #2A4433;
   color: #F5EFE2;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: 10px;
   font-size: 14px;
   font-family: inherit;
 }
 .field input:focus {
-  outline: 2px solid #C8531E;
+  outline: 2px solid #3B82F6;
   outline-offset: 1px;
 }
 .checkbox-row {
@@ -13892,17 +13941,17 @@ body.focus-mode .with-nav { padding-bottom: 0; }
 .save-btn {
   margin-top: 18px;
   width: 100%;
-  background: #C8531E;
+  background: #3B82F6;
   color: #0F1F17;
   border: none;
   padding: 12px;
-  border-radius: 7px;
+  border-radius: 10px;
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
   font-family: inherit;
 }
-.save-btn:hover { background: #DA6428; }
+.save-btn:hover { background: #2563EB; }
 .entry-list {
   margin-top: 20px;
   border-top: 1px solid #2A4433;
@@ -13918,11 +13967,11 @@ body.focus-mode .with-nav { padding-bottom: 0; }
 }
 .entry-row button {
   background: transparent;
-  border: 1px solid #4A2A1E;
-  color: #D9A98D;
+  border: 1px solid #4C1D24;
+  color: #FCA5A5;
   font-size: 11px;
   padding: 4px 8px;
-  border-radius: 5px;
+  border-radius: 10px;
   cursor: pointer;
 }
 .stat-row {
@@ -13934,14 +13983,14 @@ body.focus-mode .with-nav { padding-bottom: 0; }
 .stat-cell {
   background: #0F1F17;
   border: 1px solid #2A4433;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 12px 4px;
   text-align: center;
 }
 .stat-num {
-  font-family: Georgia, serif;
+  font-family: var(--nl-font-head);
   font-size: 22px;
-  color: #E8A15C;
+  color: #60A5FA;
 }
 .stat-label {
   font-size: 10px;
@@ -13971,9 +14020,9 @@ body.focus-mode .with-nav { padding-bottom: 0; }
 }
 .bar-fill {
   height: 100%;
-  background: #C8531E;
+  background: #3B82F6;
 }
-.bar-value { color: #E8A15C; text-align: right; }
+.bar-value { color: #60A5FA; text-align: right; }
 .verdict {
   margin-top: 18px;
   display: flex;
@@ -14003,7 +14052,7 @@ body.focus-mode .with-nav { padding-bottom: 0; }
   border: 1px solid #2A4433;
   color: #F5EFE2;
   padding: 10px;
-  border-radius: 6px;
+  border-radius: 10px;
   font-size: 14px;
   font-family: inherit;
 }
@@ -14018,7 +14067,7 @@ body.focus-mode .with-nav { padding-bottom: 0; }
   border: 1px solid #2A4433;
   color: #F5EFE2;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: 10px;
   font-size: 13px;
   font-family: inherit;
 }
@@ -14027,7 +14076,7 @@ body.focus-mode .with-nav { padding-bottom: 0; }
   color: #F5EFE2;
   border: 1px solid #3A5C46;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: 10px;
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
@@ -14057,12 +14106,12 @@ body.focus-mode .with-nav { padding-bottom: 0; }
   color: #F5EFE2;
   border: 1px solid #3A5C46;
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: 10px;
   font-size: 13px;
   cursor: pointer;
 }
-.amount-row .amount-reset { background: transparent; border-color: #4A2A1E; color: #D9A98D; }
-.amount-row .amount-done { background: #C8531E; color: #0F1F17; font-weight: 600; border: none; }
+.amount-row .amount-reset { background: transparent; border-color: #4C1D24; color: #FCA5A5; }
+.amount-row .amount-done { background: #3B82F6; color: #0F1F17; font-weight: 600; border: none; }
 .goal-row { align-items: flex-start; }
 .goal-met { color: #7FBF8E; font-size: 12px; }
 .goal-not-met { color: #D97757; font-size: 12px; }
@@ -14074,13 +14123,57 @@ body.focus-mode .with-nav { padding-bottom: 0; }
 }
 .tiny-btn {
   background: transparent;
-  border: 1px solid #4A2A1E;
-  color: #D9A98D;
+  border: 1px solid #4C1D24;
+  color: #FCA5A5;
   font-size: 11px;
   padding: 4px 10px;
-  border-radius: 5px;
+  border-radius: 10px;
   cursor: pointer;
 }
+/* ===== Next Level brand look (blue accent, sporty headings, 44px taps) ===== */
+:root {
+  --nl-accent: #3B82F6;
+  --nl-accent-press: #2563EB;
+  --nl-accent-text: #60A5FA;
+  --nl-on-accent: #0F1F17;
+  --nl-radius: 10px;
+  --nl-radius-card: 14px;
+  --nl-tap: 44px;
+  --nl-font-head: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', system-ui, sans-serif;
+}
+h1, h2, h3, .stat-num, .crest { font-family: var(--nl-font-head); letter-spacing: 0.3px; }
+h1, h2 { font-weight: 700; line-height: 1.1; }
+.card h2 { font-size: 23px; }
+.card h3 { font-weight: 700; font-size: 15px; letter-spacing: 0.8px; }
+.about-page h1 { font-size: 32px; }
+.stat-num { font-size: 26px; font-weight: 700; }
+.home-header h1 { font-size: 44px; text-transform: uppercase; letter-spacing: 1px; }
+/* Every button, field and tap area is at least 44px tall */
+button, select, textarea,
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]) { min-height: var(--nl-tap); }
+button { touch-action: manipulation; }
+.checkbox-row { min-height: var(--nl-tap); }
+.field input, .match-select, .new-match-row input, .sk-notes, select, textarea { font-size: 16px; border-radius: var(--nl-radius); }
+.new-match-row input { min-width: 0; }
+.save-btn { min-height: 48px; font-size: 15px; font-weight: 700; border-radius: var(--nl-radius); }
+.save-btn:hover { background: var(--nl-accent); }
+.save-btn:active, .nl-btn:active, .sub-tabs button.active:active, .sk-pick button.active:active, .amount-row .amount-done:active { background: var(--nl-accent-press); color: #FFFFFF; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--nl-accent-text); outline-offset: 2px; }
+.tiny-btn, .sk-del, .entry-row button { padding: 6px 12px; font-size: 12px; }
+.card { border-radius: var(--nl-radius-card); }
+/* Empty states */
+.nl-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 28px 16px; margin-top: 12px; }
+.nl-empty-icon { width: 72px; height: 72px; border-radius: 50%; background: #0F1F17; border: 1px solid #2A4433; display: flex; align-items: center; justify-content: center; font-size: 34px; line-height: 1; }
+.nl-empty-text { margin: 0; max-width: 320px; color: #C8D6CC; font-size: 14px; line-height: 1.5; }
+.nl-btn { min-height: var(--nl-tap); padding: 0 22px; border: none; border-radius: var(--nl-radius); background: var(--nl-accent); color: var(--nl-on-accent); font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+/* Loading placeholders */
+.nl-skel-wrap { display: flex; flex-direction: column; gap: 12px; max-width: 480px; margin: 0 auto; padding: 4px 0; }
+.nl-skel { border-radius: var(--nl-radius); background: #1B2A20; background-image: linear-gradient(90deg, #1B2A20 0%, #26392C 50%, #1B2A20 100%); background-size: 200% 100%; animation: nl-shimmer 1.2s ease-in-out infinite; }
+.nl-skel-title { height: 28px; width: 55%; }
+.nl-skel-line { height: 14px; }
+.nl-skel-block { height: 120px; border-radius: var(--nl-radius-card); }
+@keyframes nl-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .nl-skel { animation: none; } }
 `;
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
