@@ -894,6 +894,11 @@ function nlBurst() {
 // kind: "streak" | "double" | "pb" | "goal" | "trophy"
 function nlCelebrate(kind, msg) {
   const now = Date.now();
+  const snd = { streak: "streak", double: "streak", pb: "pb", trophy: "trophy" }[kind];
+  if (snd && NL.lastSound !== snd + Math.floor(now / 900)) {
+    NL.lastSound = snd + Math.floor(now / 900);
+    nlSound(snd);
+  }
   if (now - NL.lastBurst > 900) {
     NL.lastBurst = now;
     nlBurst();
@@ -955,6 +960,99 @@ function WelcomeTour({ onClose }) {
           {last ? "Log my first session" : "Next"}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ---------- Sound effects (Web Audio, no audio files) ----------
+// OFF by default. The Settings switch saves "on"/"off" on this phone only.
+const NL_SOUND_KEY = "nlx:sound";
+// Each sound is a few short notes: [frequency Hz, start s, length s, wave].
+const NL_SOUNDS = {
+  save: [[660, 0, 0.09, "sine"], [880, 0.07, 0.12, "sine"]],
+  streak: [[523, 0, 0.1, "triangle"], [659, 0.09, 0.1, "triangle"], [784, 0.18, 0.2, "triangle"]],
+  pb: [[784, 0, 0.1, "triangle"], [1047, 0.1, 0.26, "triangle"]],
+  trophy: [[523, 0, 0.1, "triangle"], [659, 0.1, 0.1, "triangle"], [784, 0.2, 0.1, "triangle"], [1047, 0.3, 0.38, "triangle"]],
+};
+function nlSoundOn() {
+  try {
+    return localStorage.getItem(NL_SOUND_KEY) === "on";
+  } catch (e) {
+    return false;
+  }
+}
+function nlAudio() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!NL.audio) NL.audio = new AC();
+    if (NL.audio.state === "suspended") NL.audio.resume().catch(() => {});
+    return NL.audio;
+  } catch (e) {
+    return null;
+  }
+}
+function nlSound(kind, force) {
+  if (!force && !nlSoundOn()) return;
+  const notes = NL_SOUNDS[kind];
+  const ac = notes && nlAudio();
+  if (!ac) return;
+  try {
+    // Sounds that land together play one after the other, never on top of each other.
+    const t0 = Math.max(ac.currentTime + 0.01, NL.soundFree || 0);
+    let end = t0;
+    notes.forEach(([f, at, len, wave]) => {
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.type = wave;
+      o.frequency.value = f;
+      const s = t0 + at;
+      g.gain.setValueAtTime(0.0001, s);
+      g.gain.exponentialRampToValueAtTime(0.12, s + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, s + len);
+      o.connect(g);
+      g.connect(ac.destination);
+      o.start(s);
+      o.stop(s + len + 0.02);
+      end = Math.max(end, s + len);
+    });
+    NL.soundFree = end + 0.05;
+  } catch (e) {}
+}
+// iPhones only allow sound after a tap, so wake the audio on the first tap.
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "pointerdown",
+    function nlWake() {
+      if (nlSoundOn()) nlAudio();
+    },
+    { passive: true }
+  );
+}
+function nlSaved(msg) {
+  nlSound("save");
+  nlToast(msg || "Saved ✓");
+}
+function SoundToggle() {
+  const [on, setOn] = useState(nlSoundOn);
+  function flip() {
+    const next = !on;
+    setOn(next);
+    try {
+      localStorage.setItem(NL_SOUND_KEY, next ? "on" : "off");
+    } catch (e) {}
+    if (next) nlSound("save", true);
+  }
+  return (
+    <div className="card nl-setting">
+      <span style={{ fontSize: 22 }} aria-hidden="true">{on ? "🔊" : "🔇"}</span>
+      <span style={{ flex: 1 }}>
+        <span id="nl-sound-label" style={{ display: "block", color: "#F5EFE2", fontSize: 15, fontWeight: 600 }}>Sounds</span>
+        <span style={{ display: "block", color: "#9FB3A4", fontSize: 12, marginTop: 2 }}>Short sounds when you save, your streak goes up, you set a PB or unlock a trophy.</span>
+      </span>
+      <button type="button" role="switch" aria-checked={on} aria-labelledby="nl-sound-label" className={"nl-switch" + (on ? " on" : "")} onClick={flip}>
+        <span className="nl-switch-knob" />
+      </button>
     </div>
   );
 }
@@ -2593,7 +2691,8 @@ function StreakPage({ profile }) {
     setAll((a) => [...(a || []).filter((s) => s.source !== "streak"), ...next.map((s) => ({ ...s, source: "streak" }))]);
     try {
       await window.storage.set(streakLogKey(ns), JSON.stringify(next));
-      nlToast(msg);
+      if (msg.startsWith("Saved")) nlSaved(msg);
+      else nlToast(msg);
       nlStreakCheck();
     } catch (e) {
       setErr("Couldn't save — check your internet and try again.");
@@ -6109,7 +6208,7 @@ function GymApp({ onBack }) {
         return prev && estOneRM(ex.weight, ex.reps) > prev.e1rm;
       })
       .map((ex) => ex.exercise);
-    nlToast("Saved ✓");
+    nlSaved("Saved ✓");
     if (nlPbs.length) nlCelebrate("pb", `🏅 New PB: ${[...new Set(nlPbs)].join(", ")}`);
     setTab("workouts");
     window.scrollTo(0, 0);
@@ -6143,7 +6242,7 @@ function GymApp({ onBack }) {
     setBodyweightLogs(next);
     persist("gym:bodyweight", next);
     setDraftWeight(draftWeight);
-    nlToast("Saved ✓");
+    nlSaved("Saved ✓");
   }
 
   function removeBodyWeight(id) {
@@ -8564,7 +8663,7 @@ function HockeyApp({ onBack, profile, onProfileChange }) {
       setCheckedFocusGoalIds([]);
     }
 
-    nlToast("Saved ✓");
+    nlSaved("Saved ✓");
     if (mode === "match") {
       setAnalysisKind("match");
       setAnalysisEntryFilter("all");
@@ -9673,6 +9772,7 @@ function SettingsPage({ onNavigate, onLogout }) {
   return (
     <div className="about-page">
       <h1>Settings</h1>
+      <SoundToggle />
       <div className="card">
         <div className="entry-list">
           {items.map((item) => (
@@ -11746,7 +11846,7 @@ function RecoveryApp() {
     const next = [...done, { id: Date.now(), date: new Date().toISOString().slice(0, 10), title, forTeam }].slice(-200);
     setDone(next);
     save("recovery:done", next);
-    nlToast("Saved ✓ — nice work");
+    nlSaved("Saved ✓ — nice work");
     if (forTeam) safeGet("recovery:sharedPlans").then((r) => shareRecovery(checkins, next, r ? JSON.parse(r.value) : [])).catch(() => shareRecovery(checkins, next, []));
     setPlaying(null);
   }
@@ -11756,7 +11856,7 @@ function RecoveryApp() {
     const next = [...checkins.filter((c) => c.date !== today), { ...ci, score, date: today, forTeam }].slice(-60);
     setCheckins(next);
     save("recovery:checkins", next);
-    nlToast("Saved ✓");
+    nlSaved("Saved ✓");
     if (forTeam || checkins.some((c) => c.date === today && c.forTeam))
       safeGet("recovery:sharedPlans").then((r) => shareRecovery(next, done, r ? JSON.parse(r.value) : [])).catch(() => shareRecovery(next, done, []));
   }
@@ -12139,7 +12239,7 @@ function NutritionApp() {
     if (mealFor === "team") shareWithCoach("nutrition", next.filter((m) => m.forTeam).slice(-80).map(({ photo, ...m }) => m));
     setDraft(emptyMealEntry());
     setMealPhoto(null);
-    nlToast("Saved ✓");
+    nlSaved("Saved ✓");
     setTab("analysis");
     window.scrollTo(0, 0);
   }
@@ -14283,6 +14383,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--nl-accent-text)
   .bottom-nav button, .sub-tabs button, .tabs button, .sk-pick button, .entry-filter-strip button, .nl-btn, .save-btn { transition: none; }
   .save-btn:active, .nl-btn:active { transform: none; }
 }
+/* ===== Part 3: sound switch ===== */
+.nl-setting { display: flex; align-items: center; gap: 14px; padding: 16px 18px; }
+.nl-switch { position: relative; flex-shrink: 0; width: 56px; min-width: 56px; height: 44px; padding: 0; border: none; background: transparent; cursor: pointer; }
+.nl-switch::before { content: ""; position: absolute; left: 2px; right: 2px; top: 8px; bottom: 8px; border-radius: 999px; background: #2A4433; transition: background-color 0.15s ease; }
+.nl-switch.on::before { background: var(--nl-accent); }
+.nl-switch-knob { position: absolute; top: 11px; left: 5px; width: 22px; height: 22px; border-radius: 50%; background: #F5EFE2; transition: transform 0.15s ease; }
+.nl-switch.on .nl-switch-knob { transform: translateX(24px); }
+@media (prefers-reduced-motion: reduce) { .nl-switch::before, .nl-switch-knob { transition: none; } }
 `;
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
