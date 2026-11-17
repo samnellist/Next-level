@@ -1,0 +1,152 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
+    function isBlocked() { return exists(/databases/$(database)/documents/blocked/$(request.auth.uid)); }
+    function teamDoc(teamId) { return get(/databases/$(database)/documents/teams/$(teamId)).data; }
+    function hasRequest(teamId) { return exists(/databases/$(database)/documents/teams/$(teamId)/requests/$(request.auth.uid)); }
+
+    // Admin app. Becoming an admin needs the one-off setup code, which only exists here.
+    match /admins/{uid} {
+      allow get: if signedIn() && me() == uid;
+      allow create: if signedIn() && me() == uid && request.resource.data.setupCode == "W9GU-YMN7-D2E3-PBW8";
+    }
+
+    // Suspended accounts: set by the admin only.
+    match /blocked/{uid} {
+      allow get: if signedIn() && (me() == uid || isAdmin());
+      allow list, create, update, delete: if isAdmin();
+    }
+
+    // Each player's own data (logs, seasons, goals, gym, nutrition, settings): only them.
+    match /users/{uid}/{document=**} {
+      allow read, write: if signedIn() && me() == uid;
+    }
+
+    // Username, and role + main position per sport. Only the player and the admin can see it.
+    match /publicProfiles/{uid} {
+      allow get: if signedIn() && (me() == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if signedIn() && me() == uid;
+      allow delete: if signedIn() && (me() == uid || isAdmin());
+    }
+
+    // Keeps usernames unique. Can be claimed once, never taken over.
+    match /usernames/{name} {
+      allow get: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == me();
+      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+    }
+
+    // Teams are private: only the coach, the players, people who've asked to join, and the admin.
+    match /teams/{teamId} {
+      allow get: if signedIn() && (resource.data.coachUid == me() || me() in resource.data.members || hasRequest(teamId) || isAdmin());
+      allow list: if signedIn() && (resource.data.coachUid == me() || me() in resource.data.members || isAdmin());
+      allow create: if signedIn() && !isBlocked()
+        && request.resource.data.coachUid == me()
+        && request.resource.data.members.size() == 0
+        && request.resource.data.verified == false;
+      allow update: if signedIn() && (
+        // The coach runs the team, but can't verify it or hand it to someone else.
+        (resource.data.coachUid == me()
+          && request.resource.data.coachUid == resource.data.coachUid
+          && request.resource.data.verified == resource.data.verified
+          && request.resource.data.code == resource.data.code)
+        // A player can take themselves out of a team, and nothing else.
+        || (me() in resource.data.members
+          && !(me() in request.resource.data.members)
+          && request.resource.data.members.size() == resource.data.members.size() - 1
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberNames', 'memberPos']))
+        || isAdmin());
+      allow delete: if signedIn() && (resource.data.coachUid == me() || isAdmin());
+
+      // Join requests: a player asks (pending only); the coach accepts or declines.
+      match /requests/{uid} {
+        allow get: if signedIn() && (me() == uid || teamDoc(teamId).coachUid == me() || isAdmin());
+        allow list: if signedIn() && (teamDoc(teamId).coachUid == me() || isAdmin());
+        allow create, update: if signedIn() && (
+          (me() == uid && !isBlocked() && request.resource.data.status == "pending")
+          || teamDoc(teamId).coachUid == me());
+        allow delete: if signedIn() && (me() == uid || teamDoc(teamId).coachUid == me() || isAdmin());
+      }
+    }
+
+    // Join codes: look one up only if you already know it (they can't be listed).
+    match /teamCodes/{code} {
+      allow get: if signedIn();
+      allow list: if isAdmin();
+      allow create: if signedIn() && !isBlocked()
+        && request.resource.data.coachUid == me()
+        && teamDoc(request.resource.data.teamId).coachUid == me()
+        && request.resource.data.verified == false;
+      allow update: if isAdmin();
+      allow delete: if signedIn() && (resource.data.coachUid == me() || isAdmin());
+    }
+
+    // "My team" logs: written only by an accepted player, read only by them and their coach.
+    match /sharedLogs/{docId} {
+      allow read: if signedIn() && (resource.data.uid == me() || teamDoc(resource.data.teamId).coachUid == me());
+      allow create, update: if signedIn() && !isBlocked() && request.resource.data.uid == me() && me() in teamDoc(request.resource.data.teamId).members;
+      allow delete: if signedIn() && resource.data.uid == me();
+    }
+
+    // Goals a coach sets for one player: only that coach and that player can see them.
+    // The coach adds and removes goals; the player can only tick them off.
+    match /coachGoals/{docId} {
+      allow get: if signedIn() && (resource.data.playerUid == me() || teamDoc(resource.data.teamId).coachUid == me());
+      allow list: if signedIn() && (resource.data.playerUid == me() || resource.data.coachUid == me());
+      allow create: if signedIn() && !isBlocked()
+        && request.resource.data.coachUid == me()
+        && teamDoc(request.resource.data.teamId).coachUid == me()
+        && request.resource.data.playerUid in teamDoc(request.resource.data.teamId).members
+        && docId == request.resource.data.teamId + "__" + request.resource.data.playerUid;
+      allow update: if signedIn() && (
+        (teamDoc(resource.data.teamId).coachUid == me()
+          && request.resource.data.teamId == resource.data.teamId
+          && request.resource.data.playerUid == resource.data.playerUid
+          && request.resource.data.coachUid == me())
+        || (resource.data.playerUid == me()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['goals', 'updatedAt'])));
+      allow delete: if signedIn() && (teamDoc(resource.data.teamId).coachUid == me() || resource.data.playerUid == me());
+    }
+
+    // Subscriptions (PayPal). A customer can start their own free trial or cancel,
+    // never mark themselves as paid — only the admin can do that.
+    match /subscriptions/{id} {
+      allow get, list: if signedIn() && (resource.data.uid == me() || isAdmin());
+      allow create: if isAdmin() || (signedIn() && !isBlocked()
+        && id.matches(me() + "__.*")
+        && request.resource.data.uid == me()
+        && request.resource.data.status == "trial"
+        && request.resource.data.trialEnds <= request.time.toMillis() + 32 * 86400000);
+      allow update: if isAdmin() || (signedIn() && resource.data.uid == me() && request.resource.data.uid == me() && (
+        request.resource.data.status == "cancelled"
+        || (resource.data.status in ["cancelled", "ended"]
+          && request.resource.data.status == "trial"
+          && request.resource.data.trialEnds <= request.time.toMillis() + 32 * 86400000)));
+      allow delete: if isAdmin();
+    }
+
+    // Help messages: the player and the admin.
+    match /helpTickets/{id} {
+      allow read: if signedIn() && (resource.data.uid == me() || isAdmin());
+      allow create: if signedIn() && request.resource.data.uid == me()
+        && request.resource.data.replies.size() == 0 && request.resource.data.status == "open";
+      allow update: if isAdmin() || (signedIn() && resource.data.uid == me()
+        && request.resource.data.uid == me()
+        && request.resource.data.status == "open"
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['replies', 'status', 'updatedAt']));
+      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+    }
+
+    // Reports about a team or coach: the person who sent it, and the admin.
+    match /reports/{id} {
+      allow read: if signedIn() && (resource.data.reporterUid == me() || isAdmin());
+      allow create: if signedIn() && request.resource.data.reporterUid == me() && request.resource.data.status == "open";
+      allow update: if isAdmin();
+      allow delete: if signedIn() && (resource.data.reporterUid == me() || isAdmin());
+    }
+  }
+}

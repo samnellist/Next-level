@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Next Level Admin</title>
+<link rel="apple-touch-icon" sizes="180x180" href="admin-icon-180.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+<link rel="manifest" href="admin.webmanifest" />
+<meta name="apple-mobile-web-app-title" content="NL Admin" />
+<meta name="theme-color" content="#000000" />
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root { --bg: #0B1410; --card: #13211A; --line: #2A4433; --text: #EFE9DD; --muted: #9FB3A4; --accent: #C8531E; --good: #8FD9A0; --warn: #E0B34A; --bad: #F5B199; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px calc(env(safe-area-inset-bottom, 0px) + 90px); }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 17px; margin: 0 0 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  .hint { color: var(--muted); font-size: 13px; line-height: 1.45; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--line); color: var(--muted); }
+  .tag.open { color: var(--warn); border-color: #6B5A2A; } .tag.good { color: var(--good); border-color: #2F5C3D; } .tag.bad { color: var(--bad); border-color: #6B3A2A; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  input, select, textarea { width: 100%; margin-top: 4px; background: #0F1F17; border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 10px 12px; font: inherit; font-size: 15px; }
+  button { font: inherit; font-size: 14px; border-radius: 8px; padding: 9px 14px; cursor: pointer; border: 1px solid var(--line); background: transparent; color: var(--text); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0F1F17; font-weight: 700; }
+  button.danger { border-color: #8A2E14; color: var(--bad); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .tabs { position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: #0F1A14; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .tabs button { flex: 1; border: none; border-radius: 0; padding: 10px 2px; font-size: 11px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative; }
+  .tabs button.on { color: var(--text); background: #16261C; }
+  .tabs .ico { font-size: 18px; }
+  .badge { position: absolute; top: 4px; right: 18%; background: var(--accent); color: #0F1F17; font-size: 10px; font-weight: 800; border-radius: 10px; padding: 0 5px; }
+  .stat { flex: 1; min-width: 120px; background: #0F1F17; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .stat b { display: block; font-size: 26px; }
+  .msg { border-radius: 8px; padding: 8px 10px; margin: 6px 0; border: 1px solid var(--line); white-space: pre-line; font-size: 14px; }
+  .msg.admin { background: #1B3324; margin-left: 24px; }
+  .err { color: var(--bad); font-size: 13px; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  .logo { width: 40px; height: 40px; border-radius: 50%; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
+
+// Same Firebase project as the customer apps. Everything this page can see or
+// change is decided by the security rules: only accounts in /admins can use it.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDBxWSu4RMjYC_EQsDvHPepJXtfhiAIQII",
+  authDomain: "next-level-75393.firebaseapp.com",
+  projectId: "next-level-75393",
+  storageBucket: "next-level-75393.firebasestorage.app",
+  messagingSenderId: "1038931274305",
+  appId: "1:1038931274305:web:9dfc554eacd086ba0f34c0",
+};
+if (!window.firebase.apps || !window.firebase.apps.length) window.firebase.initializeApp(FIREBASE_CONFIG);
+const auth = window.firebase.auth();
+const db = window.firebase.firestore();
+const FV = () => window.firebase.firestore.FieldValue;
+const SPORT_NAMES = { rugby: "🏉 Rugby", football: "⚽ Football", hockey: "🏑 Hockey", cricket: "🏏 Cricket", golf: "⛳ Golf" };
+const sportName = (k) => SPORT_NAMES[k] || k || "—";
+const when = (ms) => (ms ? new Date(ms).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
+const fmtCode = (c) => (c ? `${c.slice(0, 3)}-${c.slice(3)}` : "");
+const list = async (col) => (await db.collection(col).get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+
+function authMessage(e) {
+  const c = (e && e.code) || "";
+  if (c.includes("invalid-credential") || c.includes("wrong-password") || c.includes("user-not-found")) return "Incorrect email or password.";
+  if (c.includes("email-already-in-use")) return "There's already an account with that email — log in instead.";
+  if (c.includes("weak-password")) return "Use a password with at least 6 characters.";
+  if (c.includes("permission-denied")) return "Not allowed — check the setup code.";
+  if (c.includes("network")) return "No internet connection.";
+  return "Something went wrong — try again.";
+}
+
+async function deleteTeam(t) {
+  const ref = db.collection("teams").doc(t.id);
+  const reqs = await ref.collection("requests").get();
+  await Promise.all(reqs.docs.map((r) => r.ref.delete()));
+  if (t.code) await db.collection("teamCodes").doc(t.code).delete().catch(() => {});
+  await ref.delete();
+}
+
+function Login({ onDone }) {
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function go() {
+    setErr("");
+    setBusy(true);
+    try {
+      if (mode === "login") await auth.signInWithEmailAndPassword(email.trim(), password);
+      else await auth.createUserWithEmailAndPassword(email.trim(), password);
+      onDone();
+    } catch (e) {
+      setErr(authMessage(e));
+    }
+    setBusy(false);
+  }
+  return (
+    <div className="card" style={{ maxWidth: 420, margin: "40px auto" }}>
+      <h2>{mode === "login" ? "Admin log in" : "Create your admin login"}</h2>
+      <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoCapitalize="none" /></label>
+      <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} /></label>
+      {err && <p className="err">{err}</p>}
+      <div className="row">
+        <button className="primary" disabled={busy} onClick={go}>{mode === "login" ? "Log In" : "Create Login"}</button>
+        <button onClick={() => { setMode(mode === "login" ? "create" : "login"); setErr(""); }}>{mode === "login" ? "First time? Create a login" : "Back to log in"}</button>
+      </div>
+      <p className="hint">This is the Next Level admin app — it isn't part of the customer app.</p>
+    </div>
+  );
+}
+
+function Setup({ user, onDone }) {
+  const [code, setCode] = useState("");
+  const [err, setErr] = useState("");
+  async function go() {
+    setErr("");
+    try {
+      await db.collection("admins").doc(user.uid).set({ setupCode: code.trim().toUpperCase(), email: user.email, at: Date.now() });
+      onDone();
+    } catch (e) {
+      setErr("That setup code isn't right.");
+    }
+  }
+  return (
+    <div className="card" style={{ maxWidth: 420, margin: "40px auto" }}>
+      <h2>One-time admin setup</h2>
+      <p className="hint">Signed in as {user.email}. Enter the admin setup code (it's in your security rules) to turn this login into the admin account. You only do this once.</p>
+      <label>Setup code<input value={code} onChange={(e) => setCode(e.target.value)} autoCapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX" /></label>
+      {err && <p className="err">{err}</p>}
+      <div className="row">
+        <button className="primary" onClick={go}>Become Admin</button>
+        <button onClick={() => auth.signOut()}>Log out</button>
+      </div>
+    </div>
+  );
+}
+
+// What each account has signed up for: { football: ["player", "coach"], ... }.
+// Older accounts (before per-sport sign-up) only have their current role.
+function regsOf(u) {
+  if (u.registrations && Object.keys(u.registrations).length) return u.registrations;
+  const r = {};
+  Object.entries(u.roles || {}).forEach(([k, v]) => (r[k] = [v]));
+  return r;
+}
+
+function Overview({ data, go }) {
+  const coaches = data.users.filter((u) => Object.values(regsOf(u)).some((rs) => (rs || []).includes("coach"))).length;
+  const openHelp = data.tickets.filter((t) => t.status === "open").length;
+  const openReports = data.reports.filter((r) => r.status === "open").length;
+  const stat = (n, label, tab) => (
+    <button className="stat" style={{ textAlign: "left" }} onClick={() => tab && go(tab)}>
+      <b>{n}</b>
+      <span className="hint">{label}</span>
+    </button>
+  );
+  const bySport = {};
+  data.teams.forEach((t) => (bySport[t.sport] = (bySport[t.sport] || 0) + 1));
+  const signups = {};
+  data.users.forEach((u) =>
+    Object.entries(regsOf(u)).forEach(([k, rs]) => {
+      signups[k] = signups[k] || { player: 0, coach: 0 };
+      (rs || []).forEach((r) => (signups[k][r] = (signups[k][r] || 0) + 1));
+    })
+  );
+  return (
+    <>
+      <div className="row" style={{ marginBottom: 12 }}>
+        {stat(openHelp, "help messages need a reply", "help")}
+        {stat(openReports, "reports to check", "reports")}
+        {stat((data.subs || []).filter(needsCheck).length, "trials to check in PayPal", "subs")}
+      </div>
+      <div className="row" style={{ marginBottom: 12 }}>
+        {stat(data.users.length, "accounts", "users")}
+        {stat(coaches, "coaches", "users")}
+        {stat(data.teams.length, "teams", "teams")}
+        {stat(data.blocked.length, "suspended", "users")}
+      </div>
+      <div className="card">
+        <h2>By sport</h2>
+        <div className="row" style={{ justifyContent: "space-between", padding: "4px 0" }}>
+          <span className="hint">Sport</span>
+          <span className="hint">Players · Coaches · Teams</span>
+        </div>
+        {Object.keys(SPORT_NAMES).map((k) => (
+          <div key={k} className="row" style={{ justifyContent: "space-between", padding: "4px 0" }}>
+            <span>{sportName(k)}</span>
+            <span className="hint">
+              {(signups[k] || {}).player || 0} · {(signups[k] || {}).coach || 0} · {bySport[k] || 0}
+            </span>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function Help({ data, reload }) {
+  const [filter, setFilter] = useState("open");
+  const [drafts, setDrafts] = useState({});
+  const [err, setErr] = useState("");
+  const shown = data.tickets.filter((t) => filter === "all" || t.status === filter).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  async function reply(t) {
+    const text = (drafts[t.id] || "").trim();
+    if (!text) return;
+    try {
+      await db.collection("helpTickets").doc(t.id).update({ replies: FV().arrayUnion({ from: "admin", text, at: Date.now() }), status: "answered", updatedAt: Date.now() });
+      setDrafts({ ...drafts, [t.id]: "" });
+      reload();
+    } catch (e) {
+      setErr("Couldn't send the reply.");
+    }
+  }
+  async function close(t) {
+    await db.collection("helpTickets").doc(t.id).update({ status: "closed", updatedAt: Date.now() }).catch(() => setErr("Couldn't close it."));
+    reload();
+  }
+  return (
+    <>
+      <div className="row" style={{ marginBottom: 12 }}>
+        {[["open", "Needs a reply"], ["answered", "Replied"], ["closed", "Closed"], ["all", "All"]].map(([k, l]) => (
+          <button key={k} className={filter === k ? "primary" : ""} onClick={() => setFilter(k)}>{l}</button>
+        ))}
+      </div>
+      {err && <p className="err">{err}</p>}
+      {shown.length === 0 && <p className="hint">Nothing here.</p>}
+      {shown.map((t) => (
+        <div key={t.id} className="card">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <strong>{t.username || "Unknown"}</strong>
+            <span className={"tag " + (t.status === "open" ? "open" : t.status === "answered" ? "good" : "")}>{t.status === "open" ? "Needs a reply" : t.status === "answered" ? "Replied" : "Closed"}</span>
+          </div>
+          <p className="hint" style={{ margin: "2px 0 6px" }}>{sportName(t.sport)} · {when(t.createdAt)}</p>
+          <div className="msg">{t.message}</div>
+          {(t.replies || []).map((r, i) => (
+            <div key={i} className={"msg " + (r.from === "admin" ? "admin" : "")}>
+              <div className="hint" style={{ fontWeight: 700 }}>{r.from === "admin" ? "You (Next Level team)" : t.username} · {when(r.at)}</div>
+              {r.text}
+            </div>
+          ))}
+          {t.status !== "closed" && (
+            <>
+              <textarea rows={3} placeholder="Write a reply…" value={drafts[t.id] || ""} onChange={(e) => setDrafts({ ...drafts, [t.id]: e.target.value })} />
+              <div className="row" style={{ marginTop: 8 }}>
+                <button className="primary" onClick={() => reply(t)}>Send Reply</button>
+                <button onClick={() => close(t)}>Close</button>
+              </div>
+            </>
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
+function Reports({ data, reload }) {
+  const [filter, setFilter] = useState("open");
+  const shown = data.reports.filter((r) => filter === "all" || r.status === filter).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  async function setStatus(r, status) {
+    await db.collection("reports").doc(r.id).update({ status, handledAt: Date.now() });
+    reload();
+  }
+  async function removeTeam(r) {
+    const t = data.teams.find((x) => x.id === r.teamId);
+    if (!t) return window.alert("That team has already been removed.");
+    if (!window.confirm(`Remove the team "${t.name}"? Its players will be taken out of it.`)) return;
+    await deleteTeam(t);
+    await setStatus(r, "actioned");
+  }
+  async function suspendCoach(r) {
+    if (!r.coachUid) return;
+    if (!window.confirm(`Suspend ${r.coachName || "this coach"}? They won't be able to use Next Level until you unsuspend them.`)) return;
+    await db.collection("blocked").doc(r.coachUid).set({ username: r.coachName || "", reason: r.reason, at: Date.now() });
+    await setStatus(r, "actioned");
+  }
+  return (
+    <>
+      <div className="row" style={{ marginBottom: 12 }}>
+        {[["open", "To check"], ["actioned", "Actioned"], ["dismissed", "Dismissed"], ["all", "All"]].map(([k, l]) => (
+          <button key={k} className={filter === k ? "primary" : ""} onClick={() => setFilter(k)}>{l}</button>
+        ))}
+      </div>
+      {shown.length === 0 && <p className="hint">No reports here.</p>}
+      {shown.map((r) => (
+        <div key={r.id} className="card">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <strong>{r.reason}</strong>
+            <span className={"tag " + (r.status === "open" ? "open" : r.status === "actioned" ? "bad" : "")}>{r.status}</span>
+          </div>
+          <p className="hint" style={{ margin: "4px 0" }}>
+            Team <b style={{ color: "var(--text)" }}>{r.teamName}</b> · coach <b style={{ color: "var(--text)" }}>{r.coachName || "—"}</b> · {sportName(r.sport)}
+            <br />Reported by {r.reporterName || "unknown"} · {when(r.createdAt)}
+          </p>
+          {r.details && <div className="msg">{r.details}</div>}
+          {r.status === "open" && (
+            <div className="row" style={{ marginTop: 8 }}>
+              <button className="danger" onClick={() => removeTeam(r)}>Remove team</button>
+              <button className="danger" onClick={() => suspendCoach(r)}>Suspend coach</button>
+              <button onClick={() => setStatus(r, "dismissed")}>Dismiss</button>
+            </div>
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
+function Teams({ data, reload }) {
+  const [sport, setSport] = useState("all");
+  const [q, setQ] = useState("");
+  const shown = data.teams
+    .filter((t) => (sport === "all" || t.sport === sport) && (!q || `${t.name} ${t.coachName}`.toLowerCase().includes(q.toLowerCase())))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  async function verify(t, on) {
+    await db.collection("teams").doc(t.id).update({ verified: on });
+    if (t.code) await db.collection("teamCodes").doc(t.code).update({ verified: on }).catch(() => {});
+    reload();
+  }
+  async function remove(t) {
+    if (!window.confirm(`Remove the team "${t.name}"? Its players will be taken out of it.`)) return;
+    await deleteTeam(t);
+    reload();
+  }
+  return (
+    <>
+      <div className="row" style={{ marginBottom: 12 }}>
+        <select value={sport} onChange={(e) => setSport(e.target.value)} style={{ flex: 1 }}>
+          <option value="all">All sports</option>
+          {Object.keys(SPORT_NAMES).map((k) => (
+            <option key={k} value={k}>{sportName(k)}</option>
+          ))}
+        </select>
+        <input placeholder="Search team or coach" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: 2 }} />
+      </div>
+      {shown.length === 0 && <p className="hint">No teams.</p>}
+      {shown.map((t) => (
+        <div key={t.id} className="card">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <strong>{t.name} {t.verified && <span className="tag good">✔ Verified</span>}</strong>
+            <span className="hint">{sportName(t.sport)}</span>
+          </div>
+          <p className="hint" style={{ margin: "4px 0 8px" }}>
+            Coach {t.coachName || "—"} · {(t.members || []).length} player{(t.members || []).length === 1 ? "" : "s"} · code {fmtCode(t.code)} · created {when(t.createdAt)}
+          </p>
+          <div className="row">
+            {t.verified ? <button onClick={() => verify(t, false)}>Remove ✔</button> : <button onClick={() => verify(t, true)}>✔ Mark as verified</button>}
+            <button className="danger" onClick={() => remove(t)}>Remove team</button>
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function Users({ data, reload }) {
+  const [q, setQ] = useState("");
+  const [sport, setSport] = useState("all");
+  const blocked = new Set(data.blocked.map((b) => b.id));
+  const shown = data.users
+    .filter((u) => !q || String(u.username || "").toLowerCase().includes(q.toLowerCase()))
+    .filter((u) => sport === "all" || (regsOf(u)[sport] || []).length > 0)
+    .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0));
+  async function suspend(u) {
+    if (!window.confirm(`Suspend ${u.username}? They won't be able to use Next Level until you unsuspend them.`)) return;
+    await db.collection("blocked").doc(u.id).set({ username: u.username, at: Date.now() });
+    reload();
+  }
+  async function giveFree(u) {
+    const regs = regsOf(u);
+    const coachSports = Object.keys(regs).filter((k) => (regs[k] || []).includes("coach"));
+    if (!window.confirm(`Give ${u.username} free access to everything${coachSports.length ? " (including coaching)" : ""}? You can remove it in Subs.`)) return;
+    const base = { uid: u.id, username: u.username, status: "active", free: true, period: "free", startedAt: Date.now() };
+    await db.collection("subscriptions").doc(`${u.id}__all`).set({ ...base, plan: "all", sport: "all" });
+    for (const k of coachSports) await db.collection("subscriptions").doc(`${u.id}__team-${k}`).set({ ...base, plan: "team", sport: k });
+    reload();
+  }
+  async function unsuspend(u) {
+    await db.collection("blocked").doc(u.id).delete();
+    reload();
+  }
+  return (
+    <>
+      <div className="row" style={{ marginBottom: 12 }}>
+        <input placeholder="Search usernames" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: 2 }} />
+        <select value={sport} onChange={(e) => setSport(e.target.value)} style={{ flex: 1 }}>
+          <option value="all">All sports</option>
+          {Object.keys(SPORT_NAMES).map((k) => (
+            <option key={k} value={k}>{sportName(k)}</option>
+          ))}
+        </select>
+      </div>
+      <p className="hint">{shown.length} account{shown.length === 1 ? "" : "s"}. You only see usernames and what they've signed up for — never anyone's private logs.</p>
+      {shown.map((u) => {
+        const regs = regsOf(u);
+        const sports = Object.keys(regs).filter((k) => (regs[k] || []).length);
+        return (
+          <div key={u.id} className="card">
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <strong>{u.username}</strong>
+              {blocked.has(u.id) ? <span className="tag bad">Suspended</span> : <span className="hint">{u.joinedAt ? "joined " + when(u.joinedAt) : ""}</span>}
+            </div>
+            <p className="hint" style={{ margin: "4px 0 8px" }}>
+              {sports.length === 0
+                ? "Not signed up to a sport yet"
+                : sports
+                    .map((k) => `${sportName(k)}: ${regs[k].map((r) => (r === "coach" ? "Coach" : "Player")).join(" + ")}${(u.positions || {})[k] ? " (" + u.positions[k] + ")" : ""}`)
+                    .join(" · ")}
+            </p>
+            <div className="row">
+              {(data.subs || []).some((x) => x.uid === u.id && x.free && x.status === "active") ? (
+                <span className="tag">🎁 Free access</span>
+              ) : (
+                <button onClick={() => giveFree(u)}>🎁 Give free access</button>
+              )}
+              {blocked.has(u.id) ? <button onClick={() => unsuspend(u)}>Unsuspend</button> : <button className="danger" onClick={() => suspend(u)}>Suspend</button>}
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+const PLAN_PRICE = { sport: ["£4.99/mo", "£39.99/yr"], all: ["£14.99/mo", "£99.99/yr"], team: ["£9.99/mo", "£79.99/yr"] };
+function planLabel(x) {
+  const name = x.plan === "all" ? "All Sports" : x.plan === "team" ? `Coach team · ${sportName(x.sport)}` : `${sportName(x.sport)} only`;
+  if (x.free) return `${name} · free (given by you)`;
+  const pr = PLAN_PRICE[x.plan] || [];
+  return `${name} · ${x.period === "yearly" ? pr[1] : pr[0]}`;
+}
+const DAY = 864e5;
+const needsCheck = (x) => x.status === "trial" && Date.now() > (x.trialEnds || 0);
+
+function Subscriptions({ data, reload }) {
+  const subs = data.subs || [];
+  const [err, setErr] = useState("");
+  async function remove(x) {
+    if (!window.confirm(`Remove ${x.username}'s record? Only do this once it's cancelled in PayPal.`)) return;
+    await db.collection("subscriptions").doc(x.id).delete().catch(() => setErr("Couldn't remove."));
+    reload();
+  }
+  const clean = (x) => {
+    const { id, ...rest } = x;
+    return rest;
+  };
+  const save = (x, fields) =>
+    db
+      .collection("subscriptions")
+      .doc(x.id)
+      .set({ ...clean(x), ...fields })
+      .then(reload)
+      .catch(() => setErr("Couldn't save — check the latest security rules are published."));
+  const check = subs.filter(needsCheck).sort((a, b) => a.trialEnds - b.trialEnds);
+  const trial = subs.filter((x) => x.status === "trial" && !needsCheck(x)).sort((a, b) => a.trialEnds - b.trialEnds);
+  const active = subs.filter((x) => x.status === "active");
+  const cancelled = subs.filter((x) => x.status === "cancelled");
+  const ended = subs.filter((x) => x.status === "ended");
+  const ref = (x) => (x.paypalId ? <span className="hint"> · PayPal ref <b style={{ color: "var(--text)", userSelect: "all" }}>{x.paypalId}</b></span> : null);
+  const head = (x) => (
+    <div className="row" style={{ justifyContent: "space-between" }}>
+      <strong>{x.username}</strong>
+      <span className="hint">{planLabel(x)}</span>
+    </div>
+  );
+  const monthly = active.filter((x) => !x.free).reduce((t, x) => {
+    const pr = PLAN_PRICE[x.plan] || ["£0", "£0"];
+    const v = parseFloat((x.period === "yearly" ? pr[1] : pr[0]).replace("£", "")) || 0;
+    return t + (x.period === "yearly" ? v / 12 : v);
+  }, 0);
+  return (
+    <>
+      {err && <p className="err">{err}</p>}
+      <div className="row" style={{ marginBottom: 12 }}>
+        <div className="stat"><b>{trial.length}</b><span className="hint">on free trial</span></div>
+        <div className="stat"><b>{active.filter((x) => !x.free).length}</b><span className="hint">paying</span></div>
+        <div className="stat"><b>£{monthly.toFixed(2)}</b><span className="hint">a month (before fees)</span></div>
+      </div>
+      <div className="card">
+        <h2>✋ Check in PayPal ({check.length})</h2>
+        <p className="hint">Trial ended — look in PayPal that the first payment came in for this reference, then tap one. They keep access for {3} days while you check.</p>
+        {check.length === 0 && <p className="hint">Nothing to check.</p>}
+        {check.map((x) => (
+          <div key={x.id} style={{ borderTop: "1px solid var(--line)", padding: "10px 0" }}>
+            {head(x)}
+            <p className="hint" style={{ margin: "4px 0 8px" }}>Trial ended {when(x.trialEnds)}{ref(x)}</p>
+            <div className="row">
+              <button onClick={() => save(x, { status: "active", paidSince: Date.now() })}>✅ Paid — keep them on</button>
+              <button className="danger" onClick={() => save(x, { status: "ended", endedAt: Date.now() })}>❌ Not paid — end</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="card">
+        <h2>Free trials ({trial.length})</h2>
+        {trial.length === 0 && <p className="hint">No one on a trial right now.</p>}
+        {trial.map((x) => (
+          <div key={x.id} style={{ borderTop: "1px solid var(--line)", padding: "8px 0" }}>
+            {head(x)}
+            <p className="hint" style={{ margin: "4px 0 0" }}>
+              {Math.max(0, Math.ceil((x.trialEnds - Date.now()) / DAY))} days left · first payment {when(x.trialEnds)}
+              {ref(x)}
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="card">
+        <h2>Paying ({active.length})</h2>
+        <p className="hint">If PayPal shows someone has stopped paying, tap End.</p>
+        {active.map((x) => (
+          <div key={x.id} style={{ borderTop: "1px solid var(--line)", padding: "8px 0" }}>
+            {head(x)}
+            <p className="hint" style={{ margin: "4px 0 6px" }}>
+              {x.free ? "Free access" : `Paying since ${when(x.paidSince || x.trialEnds)}`}
+              {ref(x)}
+            </p>
+            <button className="danger" onClick={() => (x.free ? remove(x) : save(x, { status: "ended", endedAt: Date.now() }))}>{x.free ? "Remove free access" : "End"}</button>
+          </div>
+        ))}
+      </div>
+      <div className="card">
+        <h2>Cancelled — stop in PayPal ({cancelled.length})</h2>
+        <p className="hint">They cancelled in the app. Make sure the subscription is cancelled in PayPal (Pay &amp; get paid → Subscriptions → search the reference), then remove the record — that deletes the last of their payment details.</p>
+        {cancelled.map((x) => (
+          <div key={x.id} style={{ borderTop: "1px solid var(--line)", padding: "8px 0" }}>
+            {head(x)}
+            <p className="hint" style={{ margin: "4px 0 6px" }}>
+              Cancelled {when(x.cancelledAt)}
+              {ref(x)}
+            </p>
+            <button onClick={() => remove(x)}>Done — remove record</button>
+          </div>
+        ))}
+      </div>
+      {ended.length > 0 && (
+        <div className="card">
+          <h2>Ended ({ended.length})</h2>
+          {ended.map((x) => (
+            <div key={x.id} style={{ borderTop: "1px solid var(--line)", padding: "8px 0" }}>
+              {head(x)}
+              <div className="row" style={{ marginTop: 6 }}>
+                <button onClick={() => save(x, { status: "active", paidSince: Date.now() })}>They've paid — reactivate</button>
+                <button onClick={() => remove(x)}>Remove record</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function Admin({ user }) {
+  const [tab, setTab] = useState("overview");
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  async function reload() {
+    try {
+      const [tickets, reports, teams, users, blocked, subs] = await Promise.all(["helpTickets", "reports", "teams", "publicProfiles", "blocked", "subscriptions"].map(list));
+      setData({ tickets, reports, teams, users, blocked, subs });
+      setErr("");
+    } catch (e) {
+      setErr("Couldn't load — check your connection, and that the latest security rules are published.");
+    }
+  }
+  useEffect(() => {
+    reload();
+  }, []);
+  const openHelp = data ? data.tickets.filter((t) => t.status === "open").length : 0;
+  const openReports = data ? data.reports.filter((r) => r.status === "open").length : 0;
+  const toCheck = data ? (data.subs || []).filter(needsCheck).length : 0;
+  const TABS = [["overview", "📊", "Overview", 0], ["subs", "💷", "Subs", toCheck], ["help", "💬", "Help", openHelp], ["reports", "⚠️", "Reports", openReports], ["teams", "👥", "Teams", 0], ["users", "🙋", "Users", 0]];
+  const Page = { overview: Overview, subs: Subscriptions, help: Help, reports: Reports, teams: Teams, users: Users }[tab];
+  return (
+    <>
+      <div className="top">
+        <div className="row">
+          <img className="logo" src="apple-touch-icon.png" alt="" />
+          <div>
+            <h1>Next Level Admin</h1>
+            <div className="hint">{user.email}</div>
+          </div>
+        </div>
+        <div className="row">
+          <button onClick={reload}>↻</button>
+          <button onClick={() => auth.signOut()}>Log out</button>
+        </div>
+      </div>
+      {err && <p className="err">{err}</p>}
+      {!data ? <p className="hint">Loading…</p> : <Page data={data} reload={reload} go={setTab} />}
+      <nav className="tabs">
+        {TABS.map(([k, ico, label, n]) => (
+          <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
+            <span className="ico">{ico}</span>
+            {label}
+            {n > 0 && <span className="badge">{n}</span>}
+          </button>
+        ))}
+      </nav>
+    </>
+  );
+}
+
+function App() {
+  const [user, setUser] = useState(undefined);
+  const [isAdmin, setIsAdmin] = useState(null);
+  async function check(u) {
+    setUser(u);
+    if (!u) return setIsAdmin(null);
+    const d = await db.collection("admins").doc(u.uid).get().catch(() => null);
+    setIsAdmin(!!(d && d.exists));
+  }
+  useEffect(() => auth.onAuthStateChanged((u) => check(u)), []);
+  return (
+    <main>
+      {user === undefined || (user && isAdmin === null) ? (
+        <p className="hint">Loading…</p>
+      ) : !user ? (
+        <Login onDone={() => {}} />
+      ) : !isAdmin ? (
+        <Setup user={user} onDone={() => check(auth.currentUser)} />
+      ) : (
+        <Admin user={user} />
+      )}
+    </main>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
