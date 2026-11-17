@@ -807,6 +807,158 @@ function LoadingSkeleton({ label = "Loading", rows = 3, pad, height }) {
   );
 }
 
+// ---------- Celebrations, "Saved ✓" toasts, vibration, welcome tour ----------
+// Plain DOM (no React) so any screen can call them. Confetti is skipped when the
+// phone has "reduce motion" on; vibration only runs where the phone supports it.
+const NL = { ns: "", lastBurst: 0, toastQ: [], toastOn: false };
+function nlReduceMotion() {
+  try {
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  } catch (e) {
+    return false;
+  }
+}
+function nlVibrate(pattern) {
+  try {
+    if (navigator.vibrate) navigator.vibrate(pattern);
+  } catch (e) {}
+}
+function nlToast(msg) {
+  if (!msg) return;
+  NL.toastQ.push(msg);
+  if (!NL.toastOn) nlNextToast();
+}
+function nlNextToast() {
+  const msg = NL.toastQ.shift();
+  if (!msg) {
+    NL.toastOn = false;
+    return;
+  }
+  NL.toastOn = true;
+  const el = document.createElement("div");
+  el.className = "nl-toast";
+  el.setAttribute("role", "status");
+  el.setAttribute("aria-live", "polite");
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.classList.add("out"), 1700);
+  setTimeout(() => {
+    el.remove();
+    nlNextToast();
+  }, 1900);
+}
+function nlBurst() {
+  if (nlReduceMotion()) return;
+  const c = document.createElement("canvas");
+  const ctx = c.getContext && c.getContext("2d");
+  if (!ctx) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  c.width = w * dpr;
+  c.height = h * dpr;
+  c.className = "nl-burst";
+  c.setAttribute("aria-hidden", "true");
+  document.body.appendChild(c);
+  ctx.scale(dpr, dpr);
+  const colors = ["#3B82F6", "#60A5FA", "#93C5FD", "#F5EFE2", "#F5D97A"];
+  const parts = Array.from({ length: 70 }, () => {
+    const a = Math.random() * Math.PI * 2;
+    const s = 4 + Math.random() * 7;
+    return { x: w / 2, y: h * 0.38, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 3, r: 3 + Math.random() * 4, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4, c: colors[(Math.random() * colors.length) | 0] };
+  });
+  const start = performance.now();
+  const dur = 1100;
+  function frame(t) {
+    const k = (t - start) / dur;
+    ctx.clearRect(0, 0, w, h);
+    if (k >= 1) return c.remove();
+    ctx.globalAlpha = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+    parts.forEach((p) => {
+      p.vy += 0.25;
+      p.vx *= 0.985;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vr;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.c;
+      ctx.fillRect(-p.r, -p.r / 2, p.r * 2, p.r);
+      ctx.restore();
+    });
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+// kind: "streak" | "double" | "pb" | "goal" | "trophy"
+function nlCelebrate(kind, msg) {
+  const now = Date.now();
+  if (now - NL.lastBurst > 900) {
+    NL.lastBurst = now;
+    nlBurst();
+    nlVibrate(kind === "trophy" ? [40, 60, 40, 60, 90] : kind === "pb" ? [30, 50, 60] : [35, 45, 35]);
+  }
+  if (msg) nlToast(msg);
+}
+// Compares the streak with the last one this phone saw, and celebrates when it
+// goes up (or a ×2 double day is added). silent = just remember it.
+async function nlStreakCheck(silent) {
+  try {
+    const st = streakStats(await loadAllStreakSessions(NL.ns));
+    const n = st.current ? st.current.days.length : 0;
+    const key = "nlx:streakSeen:" + NL.ns;
+    let prev = null;
+    try {
+      prev = JSON.parse(localStorage.getItem(key) || "null");
+    } catch (e) {}
+    try {
+      localStorage.setItem(key, JSON.stringify({ n, dbl: st.dbl }));
+    } catch (e) {}
+    if (silent || !prev) return;
+    if (n > prev.n) nlCelebrate("streak", `🔥 Streak up — ${n} day${n === 1 ? "" : "s"}!`);
+    else if (n === prev.n && st.dbl > prev.dbl) nlCelebrate("double", "×2 Double day — two sessions today!");
+  } catch (e) {}
+}
+
+const NL_TOUR = [
+  { icon: "📝", title: "Log a session", text: "Pick your sport and log a match or training in under a minute. Gym, food and recovery count too." },
+  { icon: "📊", title: "See your analysis", text: "Every log turns into clear stats, personal bests and drills for what to work on next." },
+  { icon: "🔥", title: "Build your streak", text: "Log something every day to grow your streak. Two sessions in one day earns a ×2." },
+];
+function WelcomeTour({ onClose }) {
+  const [i, setI] = useState(0);
+  const nextRef = useRef(null);
+  const s = NL_TOUR[i];
+  const last = i === NL_TOUR.length - 1;
+  useEffect(() => {
+    if (nextRef.current) nextRef.current.focus();
+  }, [i]);
+  return (
+    <div className="nl-tour" role="dialog" aria-modal="true" aria-labelledby="nl-tour-title" onKeyDown={(e) => e.key === "Escape" && onClose(false)}>
+      <div className="nl-tour-card" key={i}>
+        <button type="button" className="nl-tour-skip" onClick={() => onClose(false)}>
+          Skip
+        </button>
+        <div className="nl-tour-icon" aria-hidden="true">{s.icon}</div>
+        <p className="nl-tour-step">
+          Step {i + 1} of {NL_TOUR.length}
+        </p>
+        <h2 id="nl-tour-title">{s.title}</h2>
+        <p className="nl-tour-text">{s.text}</p>
+        <div className="nl-tour-dots" aria-hidden="true">
+          {NL_TOUR.map((_, k) => (
+            <span key={k} className={k === i ? "on" : ""} />
+          ))}
+        </div>
+        <button ref={nextRef} type="button" className="nl-btn nl-tour-next" onClick={() => (last ? onClose(true) : setI(i + 1))}>
+          {last ? "Log my first session" : "Next"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function NumberField({ label, value, onChange, min = 0 }) {
   const [text, setText] = useState(value === undefined || value === null ? "" : String(value));
   const [focused, setFocused] = useState(false);
@@ -2381,7 +2533,8 @@ function StreakPage({ profile }) {
     setAll((a) => [...(a || []).filter((s) => s.source !== "streak"), ...next.map((s) => ({ ...s, source: "streak" }))]);
     try {
       await window.storage.set(streakLogKey(ns), JSON.stringify(next));
-      setToast(msg);
+      nlToast(msg);
+      nlStreakCheck();
     } catch (e) {
       setErr("Couldn't save — check your internet and try again.");
     }
@@ -2400,7 +2553,8 @@ function StreakPage({ profile }) {
     }
     setErr("");
     setForm({ date: form.date, mins: "", work: "", km: "", reps: "", notes: "" });
-    saveOwn([...own, s], STREAK_TYPES[logType] + " saved 💪");
+    saveOwn([...own, s], "Saved ✓");
+    window.scrollTo({ top: 0, behavior: nlReduceMotion() ? "auto" : "smooth" });
   }
 
   function remove(id) {
@@ -4919,6 +5073,9 @@ function GoalCheckCard({ goals, checkedIds, onToggle }) {
 }
 
 function GoalCompletionFlash({ texts, onDismiss }) {
+  useEffect(() => {
+    if (texts && texts.length) nlCelebrate("goal");
+  }, [(texts || []).join("|")]);
   if (!texts || texts.length === 0) return null;
   return (
     <div className="card" style={{ background: "#1E3A24", border: "1px solid #3D8A4E" }}>
@@ -5808,6 +5965,7 @@ function GymApp({ onBack }) {
   function completeFocusGoal(id) {
     const today = new Date().toISOString().slice(0, 10);
     const next = focusGoals.map((g) => (g.id === id ? { ...g, completed: true, completedDate: today } : g));
+    nlCelebrate("goal", "🎯 Goal done!");
     setFocusGoals(next);
     persist("gym:focusGoals", next, next);
     setCheckedFocusGoalIds((ids) => ids.filter((x) => x !== id));
@@ -5884,6 +6042,18 @@ function GymApp({ onBack }) {
       });
       setCheckedFocusGoalIds([]);
     }
+
+    const nlPbs = currentExercises
+      .filter((ex) => {
+        const prev = bestForExercise(workouts, ex.exercise);
+        return prev && estOneRM(ex.weight, ex.reps) > prev.e1rm;
+      })
+      .map((ex) => ex.exercise);
+    nlToast("Saved ✓");
+    if (nlPbs.length) nlCelebrate("pb", `🏅 New PB: ${[...new Set(nlPbs)].join(", ")}`);
+    setTab("workouts");
+    window.scrollTo(0, 0);
+    setTimeout(() => nlStreakCheck(), 300);
   }
 
   function repeatWorkout(w) {
@@ -5913,6 +6083,7 @@ function GymApp({ onBack }) {
     setBodyweightLogs(next);
     persist("gym:bodyweight", next);
     setDraftWeight(draftWeight);
+    nlToast("Saved ✓");
   }
 
   function removeBodyWeight(id) {
@@ -5971,6 +6142,7 @@ function GymApp({ onBack }) {
 
       <main className="main">
         <TrophyFlash trophies={flashTrophies} onDismiss={() => setFlashTrophies([])} />
+        <GoalCompletionFlash texts={completedFlash} onDismiss={() => setCompletedFlash([])} />
         {tab === "goals" && (
           <FocusGoalsPanel
             goals={focusGoals}
@@ -6026,7 +6198,6 @@ function GymApp({ onBack }) {
         )}
         {tab === "track" && (
           <section>
-            <GoalCompletionFlash texts={completedFlash} onDismiss={() => setCompletedFlash([])} />
 
             <GoalCheckCard goals={focusGoals} checkedIds={checkedFocusGoalIds} onToggle={toggleFocusGoalChecked} />
 
@@ -8175,6 +8346,7 @@ function FootballApp({ onBack, profile, onProfileChange }) {
   function completeFocusGoal(id) {
     const today = new Date().toISOString().slice(0, 10);
     const next = focusGoals.map((g) => (g.id === id ? { ...g, completed: true, completedDate: today } : g));
+    nlCelebrate("goal", "🎯 Goal done!");
     setFocusGoals(next);
     persist(ns + "football:focusGoals", next, next);
     setCheckedFocusGoalIds((ids) => ids.filter((x) => x !== id));
@@ -8331,6 +8503,17 @@ function FootballApp({ onBack, profile, onProfileChange }) {
       });
       setCheckedFocusGoalIds([]);
     }
+
+    nlToast("Saved ✓");
+    if (mode === "match") {
+      setAnalysisKind("match");
+      setAnalysisEntryFilter("all");
+      setTab("analysis");
+    } else {
+      setTab("history");
+    }
+    window.scrollTo(0, 0);
+    setTimeout(() => nlStreakCheck(), 300);
   }
 
   const [analysisEntryFilter, setAnalysisEntryFilter] = useState("all");
@@ -8806,6 +8989,7 @@ function FootballApp({ onBack, profile, onProfileChange }) {
 
       <main className="main">
         <TrophyFlash trophies={flashTrophies} onDismiss={() => setFlashTrophies([])} />
+        <GoalCompletionFlash texts={completedFlash} onDismiss={() => setCompletedFlash([])} />
         <PBFlash items={pbFlash} onDismiss={() => setPbFlash([])} />
         {tab === "goals" && (
           <FocusGoalsPanel
@@ -9014,7 +9198,6 @@ function FootballApp({ onBack, profile, onProfileChange }) {
               <>
             {mode === "match" && <LogStylePicker value={logStyle} onChange={chooseLogStyle} />}
 
-            <GoalCompletionFlash texts={completedFlash} onDismiss={() => setCompletedFlash([])} />
 
             <GoalCheckCard goals={focusGoals} checkedIds={checkedFocusGoalIds} onToggle={toggleFocusGoalChecked} />
 
@@ -9738,6 +9921,9 @@ function newPersonalBests(fields, metrics, previous, entry) {
 }
 
 function PBFlash({ items, onDismiss }) {
+  useEffect(() => {
+    if (items && items.length) nlCelebrate("pb");
+  }, [(items || []).join("|")]);
   if (!items || !items.length) return null;
   return (
     <div className="card" style={{ background: "#2A1F0F", border: "1px solid #E8B923" }}>
@@ -9761,6 +9947,9 @@ function PBFlash({ items, onDismiss }) {
 }
 
 function TrophyFlash({ trophies, onDismiss }) {
+  useEffect(() => {
+    if (trophies && trophies.length) nlCelebrate("trophy");
+  }, [(trophies || []).map((t) => t.id).join("|")]);
   if (!trophies || trophies.length === 0) return null;
   return (
     <div className="card" style={{ background: "#2A1F0F", border: "1px solid #E8B923" }}>
@@ -11497,6 +11686,7 @@ function RecoveryApp() {
     const next = [...done, { id: Date.now(), date: new Date().toISOString().slice(0, 10), title, forTeam }].slice(-200);
     setDone(next);
     save("recovery:done", next);
+    nlToast("Saved ✓ — nice work");
     if (forTeam) safeGet("recovery:sharedPlans").then((r) => shareRecovery(checkins, next, r ? JSON.parse(r.value) : [])).catch(() => shareRecovery(checkins, next, []));
     setPlaying(null);
   }
@@ -11506,6 +11696,7 @@ function RecoveryApp() {
     const next = [...checkins.filter((c) => c.date !== today), { ...ci, score, date: today, forTeam }].slice(-60);
     setCheckins(next);
     save("recovery:checkins", next);
+    nlToast("Saved ✓");
     if (forTeam || checkins.some((c) => c.date === today && c.forTeam))
       safeGet("recovery:sharedPlans").then((r) => shareRecovery(next, done, r ? JSON.parse(r.value) : [])).catch(() => shareRecovery(next, done, []));
   }
@@ -11888,6 +12079,9 @@ function NutritionApp() {
     if (mealFor === "team") shareWithCoach("nutrition", next.filter((m) => m.forTeam).slice(-80).map(({ photo, ...m }) => m));
     setDraft(emptyMealEntry());
     setMealPhoto(null);
+    nlToast("Saved ✓");
+    setTab("analysis");
+    window.scrollTo(0, 0);
   }
 
   function removeMeal(id) {
@@ -13119,6 +13313,13 @@ function LoginGate({ onComplete, notice, prefill }) {
 
 function App() {
   const [page, setPage] = useState("home");
+  const [tour, setTour] = useState(() => {
+    try {
+      return !localStorage.getItem("nlx:tourDone");
+    } catch (e) {
+      return false;
+    }
+  });
   const [lastTab, setLastTab] = useState({ progress: "streak", fitness: "nutrition" });
   const [sport, setSport] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -13152,6 +13353,11 @@ function App() {
     }
     loadProfile();
   }, []);
+  useEffect(() => {
+    if (!profile || !profile.username || profile.role === "coach") return;
+    NL.ns = footballUserPrefix(profile.username);
+    nlStreakCheck(true);
+  }, [profile && profile.username, profile && profile.role]);
 
   if (!profileLoaded) {
     return (
@@ -13213,6 +13419,7 @@ function App() {
   }
 
   const isCoach = profile.role === "coach";
+  NL.ns = footballUserPrefix(profile.username);
 
   // The bottom bar stays on every screen (hidden only while a live tally,
   // scorecard or guided timer is running — see useFocusMode).
@@ -13276,7 +13483,7 @@ function App() {
     return (
       <>
         <style>{css}</style>
-        <div className="with-nav">
+        <div className="with-nav nl-page">
           <FootballApp onBack={() => setSport(null)} profile={profile} onProfileChange={setProfile} />
           <CoachBot />
         </div>
@@ -13289,7 +13496,7 @@ function App() {
     return (
       <>
         <style>{css}</style>
-        <div className="with-nav">
+        <div className="with-nav nl-page">
           <CoachDashboard onExit={() => setSport(null)} profile={profile} gymView />
         </div>
         {bottomNav}
@@ -13301,7 +13508,7 @@ function App() {
     return (
       <>
         <style>{css}</style>
-        <div className="with-nav">
+        <div className="with-nav nl-page">
           <GymApp onBack={() => setSport(null)} />
           <CoachBot />
         </div>
@@ -13319,6 +13526,7 @@ function App() {
       {!isCoach && ["nutrition", "recovery"].includes(page) && (
         <SubTabs tabs={[["nutrition", "🍽️ Nutrition"], ["recovery", "🧘 Recovery"]]} page={page} onPick={goPage} />
       )}
+      <div key={page} className="nl-page">
       {page === "home" && <SportHome onSelect={(key) => (key === "streak" ? goPage("streak") : setSport(key))} isCoach={isCoach} />}
       {!isCoach && page === "streak" && <StreakPage profile={profile} />}
       {isCoach && page === "home" && (
@@ -13335,6 +13543,18 @@ function App() {
       {!isCoach && page === "trophies" && <AchievementsPage onLog={() => goPage("streak")} />}
       {page === "help" && <HelpPage />}
       {page === "settings" && <SettingsPage onNavigate={setPage} onLogout={handleLogout} />}
+      </div>
+      {tour && !isCoach && (
+        <WelcomeTour
+          onClose={(go) => {
+            try {
+              localStorage.setItem("nlx:tourDone", "1");
+            } catch (e) {}
+            setTour(false);
+            if (go) goPage("streak");
+          }}
+        />
+      )}
       <CoachBot />
       {bottomNav}
     </div>
@@ -13978,6 +14198,31 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--nl-accent-text)
 .nl-skel-block { height: 120px; border-radius: var(--nl-radius-card); }
 @keyframes nl-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .nl-skel { animation: none; } }
+/* ===== Part 2: feel — transitions, toasts, confetti, welcome tour ===== */
+.nl-page, .main > section, .tabs ~ .card { animation: nl-in 0.18s ease-out both; }
+@keyframes nl-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.bottom-nav button, .sub-tabs button, .tabs button, .sk-pick button, .entry-filter-strip button, .nl-btn, .save-btn { transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease; }
+.save-btn:active, .nl-btn:active { transform: scale(0.98); }
+.nl-toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); max-width: calc(100% - 32px); background: #F5EFE2; color: #0F1F17; padding: 12px 22px; border-radius: 999px; font-family: inherit; font-weight: 700; font-size: 15px; text-align: center; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); z-index: 90; pointer-events: none; animation: nl-toast-in 0.18s ease-out both; transition: opacity 0.2s ease; }
+.nl-toast.out { opacity: 0; }
+@keyframes nl-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.nl-burst { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 95; }
+.nl-tour { position: fixed; inset: 0; z-index: 100; background: rgba(5, 10, 8, 0.92); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.nl-tour-card { position: relative; width: 100%; max-width: 360px; background: #16261C; border: 1px solid #2A4433; border-radius: var(--nl-radius-card); padding: 40px 24px 24px; text-align: center; animation: nl-in 0.18s ease-out both; }
+.nl-tour-skip { position: absolute; top: 6px; right: 6px; background: transparent; border: none; color: #C8D6CC; font-family: inherit; font-size: 14px; font-weight: 600; padding: 0 14px; border-radius: var(--nl-radius); cursor: pointer; }
+.nl-tour-icon { font-size: 56px; line-height: 1; margin-bottom: 12px; }
+.nl-tour-step { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; color: #9FB3A4; }
+.nl-tour h2 { margin: 0 0 10px; font-size: 32px; color: #F5EFE2; }
+.nl-tour-text { margin: 0 0 18px; color: #DCE5DE; font-size: 15px; line-height: 1.5; }
+.nl-tour-dots { display: flex; justify-content: center; gap: 8px; margin-bottom: 18px; }
+.nl-tour-dots span { width: 8px; height: 8px; border-radius: 50%; background: #2A4433; }
+.nl-tour-dots span.on { background: var(--nl-accent); width: 22px; border-radius: 999px; }
+.nl-tour-next { width: 100%; min-height: 48px; }
+@media (prefers-reduced-motion: reduce) {
+  .nl-page, .main > section, .tabs ~ .card, .nl-toast, .nl-tour-card { animation: none !important; }
+  .bottom-nav button, .sub-tabs button, .tabs button, .sk-pick button, .entry-filter-strip button, .nl-btn, .save-btn { transition: none; }
+  .save-btn:active, .nl-btn:active { transform: none; }
+}
 `;
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
