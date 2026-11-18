@@ -1057,6 +1057,306 @@ function SoundToggle() {
   );
 }
 
+// ---------- Offline, install prompt, This week card, share-my-streak image ----------
+// The service worker (sw.js) keeps the app opening without signal. Logs saved
+// offline already wait in Firebase's offline store and send when back online.
+if (typeof navigator !== "undefined" && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("sw.js")
+      .then(() => navigator.serviceWorker.ready)
+      .then((reg) => reg.active && reg.active.postMessage({ type: "cache-page", url: location.pathname }))
+      .catch(() => {});
+  });
+}
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  NL.installEvt = e;
+  window.dispatchEvent(new Event("nl-install"));
+});
+window.addEventListener("appinstalled", () => {
+  NL.installEvt = null;
+  try {
+    localStorage.setItem("nlx:installDone", "1");
+  } catch (e) {}
+  window.dispatchEvent(new Event("nl-install"));
+});
+function nlOfflineBar() {
+  let el = document.getElementById("nl-offline");
+  if (navigator.onLine === false) {
+    NL.wentOffline = true;
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "nl-offline";
+      el.className = "nl-offline";
+      el.setAttribute("role", "status");
+      el.textContent = "You're offline — logs save on this phone and sync when you're back online.";
+      document.body.appendChild(el);
+    }
+  } else {
+    if (el) el.remove();
+    if (NL.wentOffline) {
+      NL.wentOffline = false;
+      const done = () => nlToast("Back online — everything's synced ✓");
+      if (CLOUD.enabled && CLOUD.uid && cloudDb && cloudDb.waitForPendingWrites) cloudDb.waitForPendingWrites().then(done, () => {});
+      else done();
+    }
+  }
+}
+window.addEventListener("online", nlOfflineBar);
+window.addEventListener("offline", nlOfflineBar);
+window.addEventListener("load", nlOfflineBar);
+
+function nlStandalone() {
+  try {
+    return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+  } catch (e) {
+    return false;
+  }
+}
+function nlIsIOS() {
+  const ua = navigator.userAgent || "";
+  return /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+}
+function InstallBanner() {
+  const [, bump] = useState(0);
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return nlStandalone() || !!localStorage.getItem("nlx:installDismissed") || !!localStorage.getItem("nlx:installDone");
+    } catch (e) {
+      return nlStandalone();
+    }
+  });
+  useEffect(() => {
+    const on = () => bump((x) => x + 1);
+    window.addEventListener("nl-install", on);
+    return () => window.removeEventListener("nl-install", on);
+  }, []);
+  let done = false;
+  try {
+    done = !!localStorage.getItem("nlx:installDone");
+  } catch (e) {}
+  if (hidden || done || nlStandalone()) return null;
+  const ios = nlIsIOS();
+  if (!ios && !NL.installEvt) return null;
+  function dismiss() {
+    try {
+      localStorage.setItem("nlx:installDismissed", "1");
+    } catch (e) {}
+    setHidden(true);
+  }
+  function install() {
+    const evt = NL.installEvt;
+    if (!evt) return;
+    evt.prompt();
+    (evt.userChoice || Promise.resolve({})).then((c) => {
+      NL.installEvt = null;
+      if (c && c.outcome === "accepted") {
+        try {
+          localStorage.setItem("nlx:installDone", "1");
+        } catch (e) {}
+        setHidden(true);
+      } else bump((x) => x + 1);
+    });
+  }
+  return (
+    <div className="card nl-install">
+      <img src="icon-192.png" alt="" width="44" height="44" />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <strong>Install the app</strong>
+        {ios ? (
+          <p>
+            Tap <b>Share</b> <span aria-hidden="true">⬆️</span> at the bottom of Safari, then <b>Add to Home Screen</b>. It opens full screen, even without signal.
+          </p>
+        ) : (
+          <p>Add Next Level to your home screen — it opens full screen, even without signal.</p>
+        )}
+        <div className="nl-install-btns">
+          {!ios && (
+            <button type="button" className="nl-btn" onClick={install}>
+              Install
+            </button>
+          )}
+          <button type="button" className="nl-btn-ghost" onClick={dismiss}>
+            Not now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function nlWeek(all) {
+  const st = streakStats(all);
+  const mon = skMonday();
+  const sun = skAddDays(mon, 6);
+  const week = all.filter((s) => s.date >= mon && s.date <= sun);
+  const mins = week.reduce((a, s) => a + (Number(s.mins) || 0), 0);
+  const longest = week.reduce((b, s) => ((Number(s.mins) || 0) > (b ? Number(b.mins) || 0 : 0) ? s : b), null);
+  return { st, n: st.current ? st.current.days.length : 0, week, hrs: skHrs(mins), longest, dbl: st.dbl };
+}
+function nlWeekTip(w) {
+  const sport = String(ACTIVITY_OPTIONS[0] || "your sport").toLowerCase();
+  const types = new Set(w.week.map((s) => s.type));
+  if (!w.week.length) return `Log your first session this week — even 20 minutes of ${sport} practice starts your streak.`;
+  if (w.n > 0 && w.st.todayCount === 0) return `Log something today to keep your ${w.n}-day streak alive.`;
+  if (!w.n) return "Log a session today to start a new streak.";
+  if (w.week.length < 3) return `Aim for 3 sessions this week — ${3 - w.week.length} more to go.`;
+  if (!types.has("gym")) return `Add a gym session — strength work carries straight into your ${sport}.`;
+  if (!types.has("fitness")) return "Add a fitness session — a run or conditioning builds your engine.";
+  if (!w.dbl) return "Try two short sessions in one day to earn a ×2 double day.";
+  return "Big week — plan a recovery session so you come back stronger.";
+}
+function WeekCard({ onOpen }) {
+  const [w, setW] = useState(null);
+  useEffect(() => {
+    let live = true;
+    loadAllStreakSessions(NL.ns)
+      .then((all) => live && setW(nlWeek(all)))
+      .catch(() => live && setW(nlWeek([])));
+    return () => {
+      live = false;
+    };
+  }, []);
+  if (!w) {
+    return (
+      <div className="card nl-week">
+        <LoadingSkeleton label="Loading your week" rows={1} />
+      </div>
+    );
+  }
+  const b = w.longest;
+  return (
+    <div className="card nl-week">
+      <div className="nl-week-hd">
+        <h2>This week</h2>
+        <button type="button" className="nl-btn-ghost" onClick={onOpen}>
+          Streak ›
+        </button>
+      </div>
+      <div className="nl-week-grid">
+        <div className="stat-cell"><div className="stat-num">{w.week.length}</div><div className="stat-label">Sessions</div></div>
+        <div className="stat-cell"><div className="stat-num">{w.hrs}</div><div className="stat-label">Hours</div></div>
+        <div className="stat-cell"><div className="stat-num">{w.n}</div><div className="stat-label">🔥 Day streak</div></div>
+      </div>
+      <p className="nl-week-line">
+        <b>Best this week: </b>
+        {b && Number(b.mins) > 0
+          ? `${b.mins} min ${String(b.work || STREAK_TYPES[b.type] || "session").toLowerCase()} on ${skParse(b.date).toLocaleDateString("en-GB", { weekday: "long" })}`
+          : "nothing logged yet"}
+        {w.dbl > 0 ? ` · ×2 ${w.dbl} double day${w.dbl === 1 ? "" : "s"}` : ""}
+      </p>
+      <p className="nl-week-tip">
+        <span aria-hidden="true">💡 </span>
+        <b>Work on next: </b>
+        {nlWeekTip(w)}
+      </p>
+    </div>
+  );
+}
+
+// Draws the square "Share my streak" picture (1080×1080 PNG).
+async function nlStreakImage(d) {
+  const S = 1080;
+  const c = document.createElement("canvas");
+  c.width = S;
+  c.height = S;
+  const x = c.getContext("2d");
+  try {
+    await Promise.all([document.fonts.load('700 120px "Barlow Condensed"'), document.fonts.load('600 60px "Barlow Condensed"')]);
+  } catch (e) {}
+  const head = '"Barlow Condensed", "Arial Narrow", sans-serif';
+  const bg = x.createRadialGradient(S / 2, 430, 40, S / 2, S / 2, 780);
+  bg.addColorStop(0, "#123A7A");
+  bg.addColorStop(0.55, "#071833");
+  bg.addColorStop(1, "#02050B");
+  x.fillStyle = bg;
+  x.fillRect(0, 0, S, S);
+  const logo = await new Promise((res) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => res(null);
+    i.src = "icon-512.png";
+  });
+  if (logo) {
+    x.save();
+    x.beginPath();
+    x.arc(S / 2, 190, 130, 0, Math.PI * 2);
+    x.clip();
+    x.drawImage(logo, S / 2 - 130, 60, 260, 260);
+    x.restore();
+  }
+  x.textAlign = "center";
+  x.textBaseline = "alphabetic";
+  x.shadowColor = "rgba(59,130,246,0.75)";
+  x.shadowBlur = 50;
+  x.fillStyle = "#FFFFFF";
+  x.font = `700 330px ${head}`;
+  x.fillText(String(d.n), S / 2, 650);
+  x.shadowBlur = 0;
+  x.fillStyle = "#60A5FA";
+  x.font = `700 76px ${head}`;
+  x.fillText("DAY STREAK", S / 2, 740);
+  const boxes = [
+    [String(d.dbl), d.dbl === 1 ? "×2 double day" : "×2 double days"],
+    [String(d.sessions), d.sessions === 1 ? "session this week" : "sessions this week"],
+    [String(d.hrs), d.hrs === "1" ? "hour this week" : "hours this week"],
+  ];
+  const bw = 300;
+  const gap = 30;
+  const x0 = (S - (bw * 3 + gap * 2)) / 2;
+  boxes.forEach(([big, small], k) => {
+    const bx = x0 + k * (bw + gap);
+    x.fillStyle = "rgba(255,255,255,0.07)";
+    x.strokeStyle = "rgba(96,165,250,0.45)";
+    x.lineWidth = 3;
+    x.beginPath();
+    if (x.roundRect) x.roundRect(bx, 795, bw, 150, 24);
+    else x.rect(bx, 795, bw, 150);
+    x.fill();
+    x.stroke();
+    x.fillStyle = "#FFFFFF";
+    x.font = `700 72px ${head}`;
+    x.fillText(big, bx + bw / 2, 875);
+    x.fillStyle = "#BFD3EA";
+    x.font = `600 34px ${head}`;
+    x.fillText(small.toUpperCase(), bx + bw / 2, 920);
+  });
+  x.fillStyle = "#93C5FD";
+  x.font = `600 44px ${head}`;
+  x.fillText("nextlevelsport", S / 2, 1030);
+  return new Promise((res) => c.toBlob(res, "image/png"));
+}
+function ShareStreakSheet({ img, onClose }) {
+  const file = img.file;
+  const canShare = !!(navigator.canShare && file && navigator.canShare({ files: [file] }));
+  return (
+    <div className="nl-tour" role="dialog" aria-modal="true" aria-label="Share my streak" onKeyDown={(e) => e.key === "Escape" && onClose()}>
+      <div className="nl-tour-card nl-share-card">
+        <button type="button" className="nl-tour-skip" onClick={onClose}>
+          Close
+        </button>
+        <img src={img.url} alt={`My ${img.n}-day streak`} className="nl-share-img" />
+        {canShare && (
+          <button
+            type="button"
+            className="nl-btn nl-tour-next"
+            onClick={() => navigator.share({ files: [file], title: "My Next Level streak" }).catch(() => {})}
+          >
+            Share
+          </button>
+        )}
+        <a className={canShare ? "nl-btn-ghost nl-share-save" : "nl-btn nl-tour-next nl-share-save"} href={img.url} download="next-level-streak.png">
+          Save image
+        </a>
+        <p className="nl-tour-text" style={{ margin: "10px 0 0", fontSize: 13 }}>
+          For Instagram stories: tap Share and pick Instagram, or save the image and add it to your story.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function NumberField({ label, value, onChange, min = 0 }) {
   const [text, setText] = useState(value === undefined || value === null ? "" : String(value));
   const [focused, setFocused] = useState(false);
@@ -2561,6 +2861,8 @@ function StreakPage({ profile }) {
   const [form, setForm] = useState({ date: skYmd(new Date()), mins: "", work: "", km: "", reps: "", notes: "" });
   const [err, setErr] = useState("");
   const [toast, setToast] = useState("");
+  const [shareImg, setShareImg] = useState(null);
+  const [shareBusy, setShareBusy] = useState(false);
 
   async function reload() {
     const list = await loadAllStreakSessions(ns);
@@ -2820,6 +3122,29 @@ function StreakPage({ profile }) {
           <EmptyState icon="🔥" text="No streak yet — log your first session to light it up." action="Log my first session" onAction={() => { setView("log"); setTimeout(() => nlFocus("nl-sk-mins"), 60); }} />
         </div>
       )}
+      {all.length > 0 && (
+        <button
+          type="button"
+          className="nl-btn nl-share-btn"
+          disabled={shareBusy}
+          onClick={async () => {
+            setShareBusy(true);
+            try {
+              const blob = await nlStreakImage({ n, dbl: st.dbl, sessions: week.length, hrs: skHrs(sumMins(week)) });
+              if (blob) {
+                let file = null;
+                try {
+                  file = new File([blob], "next-level-streak.png", { type: "image/png" });
+                } catch (e) {}
+                setShareImg({ url: URL.createObjectURL(blob), file, n });
+              }
+            } catch (e) {}
+            setShareBusy(false);
+          }}
+        >
+          {shareBusy ? "Making your image…" : "📤 Share my streak"}
+        </button>
+      )}
       <div className="entry-filter-strip">
         <button type="button" className={view === "log" ? "active" : ""} onClick={() => setView("log")}>
           ➕ Log a session
@@ -2842,6 +3167,15 @@ function StreakPage({ profile }) {
         </>
       )}
       {toast && <div className="sk-toast" role="status">{toast}</div>}
+      {shareImg && (
+        <ShareStreakSheet
+          img={shareImg}
+          onClose={() => {
+            URL.revokeObjectURL(shareImg.url);
+            setShareImg(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -2860,7 +3194,7 @@ function SubTabs({ tabs, page, onPick }) {
   );
 }
 
-function SportHome({ onSelect, isCoach }) {
+function SportHome({ onSelect, isCoach, extra }) {
   const sports = [
     { key: "golf", label: "Golf", available: true },
     { key: "gym", label: "Gym", available: true },
@@ -2888,6 +3222,7 @@ function SportHome({ onSelect, isCoach }) {
           </button>
         ))}
       </div>
+      {extra && <div className="nl-home-extra">{extra}</div>}
     </div>
   );
 }
@@ -13777,7 +14112,18 @@ function App() {
         <SubTabs tabs={[["nutrition", "🍽️ Nutrition"], ["recovery", "🧘 Recovery"]]} page={page} onPick={goPage} />
       )}
       <div key={page} className="nl-page">
-      {page === "home" && <SportHome onSelect={(key) => (key === "streak" ? goPage("streak") : setSport(key))} isCoach={isCoach} />}
+      {page === "home" && (
+        <SportHome
+          onSelect={(key) => (key === "streak" ? goPage("streak") : setSport(key))}
+          isCoach={isCoach}
+          extra={
+            <>
+              <InstallBanner />
+              {!isCoach && <WeekCard onOpen={() => goPage("streak")} />}
+            </>
+          }
+        />
+      )}
       {!isCoach && page === "streak" && <StreakPage profile={profile} />}
       {isCoach && page === "home" && (
         <p className="hint" style={{ textAlign: "center", padding: "0 20px" }}>
@@ -14481,6 +14827,26 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--nl-accent-text)
 .nl-switch-knob { position: absolute; top: 11px; left: 5px; width: 22px; height: 22px; border-radius: 50%; background: #F5EFE2; transition: transform 0.15s ease; }
 .nl-switch.on .nl-switch-knob { transform: translateX(24px); }
 @media (prefers-reduced-motion: reduce) { .nl-switch::before, .nl-switch-knob { transition: none; } }
+/* ===== Part 4: install banner, This week card, share image, offline ===== */
+.nl-home-extra { max-width: 420px; margin: 24px auto 0; }
+.nl-install { display: flex; gap: 14px; align-items: flex-start; border-color: #1E3A8A; }
+.nl-install img { border-radius: 10px; flex-shrink: 0; }
+.nl-install strong { display: block; color: #F5EFE2; font-size: 16px; margin-bottom: 4px; }
+.nl-install p { margin: 0 0 12px; color: #C8D6CC; font-size: 13px; line-height: 1.5; }
+.nl-install-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.nl-btn-ghost { display: inline-flex; align-items: center; justify-content: center; min-height: var(--nl-tap); padding: 0 18px; border: 1px solid #3A5C46; border-radius: var(--nl-radius); background: transparent; color: #DCE5DE; font-family: inherit; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; }
+.nl-week h2 { margin: 0; }
+.nl-week-hd { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.nl-week-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.nl-week-line { margin: 14px 0 0; font-size: 14px; color: #DCE5DE; line-height: 1.5; }
+.nl-week-tip { margin: 10px 0 0; padding: 12px 14px; border-radius: var(--nl-radius); background: #0F1F17; border: 1px solid #2A4433; font-size: 14px; color: #DCE5DE; line-height: 1.5; }
+.nl-week b { color: #F5EFE2; }
+.nl-share-btn { width: 100%; margin: 0 0 14px; }
+.nl-share-card { padding-top: 52px; }
+.nl-share-img { display: block; width: 100%; height: auto; border-radius: var(--nl-radius); margin-bottom: 14px; }
+.nl-share-save { width: 100%; margin-top: 8px; }
+a.nl-btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.nl-offline { position: fixed; top: 0; left: 0; right: 0; z-index: 85; padding: calc(8px + env(safe-area-inset-top, 0px)) 16px 8px; background: #E0B34A; color: #1A1405; font-size: 13px; font-weight: 600; text-align: center; }
 `;
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
