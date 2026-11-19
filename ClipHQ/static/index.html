@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clip HQ</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff3d5a'/%3E%3Cpath d='M38 28 L74 50 L38 72 Z' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="logo">▶</span> Clip HQ</div>
+  <nav id="tabs">
+    <button data-tab="process" class="active">Process</button>
+    <button data-tab="review">Review <span class="pill" id="badge-review"></span></button>
+    <button data-tab="exports">Exports <span class="pill" id="badge-exports"></span></button>
+    <button data-tab="watcher">Watcher <span class="pill hot" id="badge-watcher"></span></button>
+    <button data-tab="record">Record <span class="pill hot" id="badge-rec"></span></button>
+    <button data-tab="campaigns">Campaigns</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+  <div class="right"><span id="queue-mini"></span><button class="ghost small" id="btn-notify" title="Allow desktop pop-ups from this page">🔔</button></div>
+</header>
+
+<main>
+<!-- PROCESS -->
+<section id="tab-process" class="tab active">
+  <div class="grid2">
+    <div class="card">
+      <h2>1. Pick a video</h2>
+      <p class="hint">A stream recording, campaign footage, or your iPhone screen recording. Any common format, any length.</p>
+      <label>Video file or folder</label>
+      <div class="row"><input id="p-path" placeholder="e.g. C:\Users\you\Videos\stream.mp4"><button class="ghost" id="p-browse">Browse…</button></div>
+      <div id="p-picked" class="hint"></div>
+      <h2 style="margin-top:22px">2. Choose settings</h2>
+      <div class="grid2 tight">
+        <div><label>Type of video</label><select id="p-preset"></select></div>
+        <div><label>Campaign</label><select id="p-campaign"></select></div>
+        <div><label>Layout</label><select id="p-layout"></select></div>
+        <div><label>Clips to make</label><input id="p-max" type="number" min="1" max="40" value="12"></div>
+        <div><label>Shortest clip (s)</label><input id="p-min-len" type="number" min="5" max="60" value="10"></div>
+        <div><label>Longest clip (s)</label><input id="p-max-len" type="number" min="8" max="180" value="30"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="p-scout"> <b>Scout mode:</b> this was recorded at
+        <input id="p-speed" type="number" step="0.25" min="1" max="8" value="2" style="width:64px"> x speed — only find the best timestamps, don't make clips</label>
+      <label class="check"><input type="checkbox" id="p-remember"> Use these settings for the drop folder too</label>
+      <div class="row" style="margin-top:16px"><button class="primary big" id="p-start">Start processing</button></div>
+      <p class="hint">Drop folder (auto-processed): <code id="p-dropdir"></code></p>
+    </div>
+    <div class="card">
+      <h2>Queue</h2>
+      <div id="queue"></div>
+    </div>
+  </div>
+</section>
+
+<!-- REVIEW -->
+<section id="tab-review" class="tab">
+  <div class="toolbar">
+    <select id="r-video"></select>
+    <select id="r-status"><option value="new,queued,rendering,ready,error">To review</option><option value="approved">Approved</option><option value="">All</option></select>
+    <span class="hint">Best clips first. Click a clip to edit text, trim, or change the layout.</span>
+  </div>
+  <div id="clips" class="clipgrid"></div>
+</section>
+
+<!-- EXPORTS -->
+<section id="tab-exports" class="tab">
+  <p class="hint">Approved clips are also saved in the <code>approved</code> folder with a .txt file holding the title, description and checklist.</p>
+  <div id="exports" class="exportlist"></div>
+</section>
+
+<!-- WATCHER -->
+<section id="tab-watcher" class="tab">
+  <div class="grid2 wide-right">
+    <div class="card">
+      <h2>Channels</h2>
+      <p class="hint">Paste a channel link or @handle. Checked every 10 minutes using YouTube's public feed (no API key, nothing is downloaded).</p>
+      <div class="row"><input id="w-add" placeholder="@streamer or https://www.youtube.com/@streamer"><button class="primary" id="w-add-btn">Add</button></div>
+      <div id="w-channels"></div>
+      <button class="ghost" id="w-check" style="margin-top:12px">Check now</button>
+    </div>
+    <div class="card">
+      <div class="row between"><h2>New uploads</h2><button class="ghost small" id="w-seen">Mark all seen</button></div>
+      <div id="w-uploads"></div>
+    </div>
+  </div>
+</section>
+
+<!-- RECORD -->
+<section id="tab-record" class="tab">
+  <div class="grid2">
+    <div class="card">
+      <h2>Screen recorder</h2>
+      <p class="hint">Leave a stream playing, press Record and walk away. Every chunk is sent to Process automatically, so clips appear while it's still recording. Your laptop won't sleep while recording.</p>
+      <div class="grid2 tight">
+        <div><label>Record</label><select id="rec-target"><option value="screen">Whole screen</option><option value="window">One window</option></select></div>
+        <div id="rec-window-wrap"><label>Window</label><select id="rec-window"></select></div>
+        <div><label>Sound</label><select id="rec-audio"><option value="system">What I hear (stream sound)</option><option value="device">An audio device</option><option value="none">No sound</option></select></div>
+        <div id="rec-dev-wrap"><label>Audio device</label><select id="rec-device"></select></div>
+        <div><label>Also record my mic</label><select id="rec-mic"><option value="">No</option></select></div>
+        <div><label>Chunk length (min)</label><input id="rec-chunk" type="number" min="2" max="120" value="20"></div>
+        <div><label>Auto-stop after (min, 0 = never)</label><input id="rec-autostop" type="number" min="0" value="180"></div>
+        <div><label>Type of video</label><select id="rec-preset"></select></div>
+        <div><label>Campaign</label><select id="rec-campaign"></select></div>
+      </div>
+      <label class="check"><input type="checkbox" id="rec-process" checked> Send each chunk to Process</label>
+      <label class="check"><input type="checkbox" id="rec-scout"> Scout mode (I'm playing the stream at <input id="rec-speed" type="number" value="2" step="0.25" min="1" max="8" style="width:60px">x speed)</label>
+      <div class="row" style="margin-top:14px">
+        <button class="rec big" id="rec-start">● Record</button>
+        <button class="ghost big" id="rec-stop" disabled>■ Stop</button>
+        <div class="timer" id="rec-timer">0:00:00</div>
+      </div>
+      <div id="rec-msg" class="hint"></div>
+    </div>
+    <div class="card">
+      <h2>Chunks recorded</h2>
+      <div id="rec-chunks" class="hint">Nothing yet.</div>
+      <h2 style="margin-top:20px">Tips</h2>
+      <ul class="hint">
+        <li>Choose <b>One window</b> and pick your browser to record just the stream (keep that window visible, not minimised).</li>
+        <li>Turn off Windows notifications/Focus pop-ups so they don't end up in the recording.</li>
+        <li>Recordings are saved in <code>input\recordings</code>.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- CAMPAIGNS -->
+<section id="tab-campaigns" class="tab">
+  <div class="grid2">
+    <div class="card">
+      <h2 id="c-form-title">New campaign</h2>
+      <input type="hidden" id="c-id">
+      <label>Name</label><input id="c-name" placeholder="Lacy">
+      <label>Required hashtags</label><input id="c-hashtags" placeholder="#Lacy #shorts">
+      <label>Required tags</label><input id="c-tags" placeholder="lacy, fortnite, gta 6">
+      <label>Pay rate</label><input id="c-pay" placeholder="$1 per 1k views">
+      <label>Who must be the main focus</label><input id="c-focus" placeholder="Lacy">
+      <label>Rules (one per line)</label><textarea id="c-rules" rows="5" placeholder="#Lacy in caption&#10;No logos"></textarea>
+      <div class="row"><button class="primary" id="c-save">Save campaign</button><button class="ghost" id="c-new">Clear</button></div>
+    </div>
+    <div class="card"><h2>Saved campaigns</h2><div id="c-list"></div></div>
+  </div>
+</section>
+
+<!-- SETTINGS -->
+<section id="tab-settings" class="tab">
+  <div class="grid2">
+    <div class="card">
+      <h2>Finding moments</h2>
+      <label>Speech model</label>
+      <select id="s-whisper"><option value="auto">Auto (best for this laptop)</option><option value="base.en">Fast (base)</option><option value="small.en">Accurate (small)</option><option value="tiny.en">Fastest (tiny)</option><option value="medium.en">Most accurate, slow (medium)</option></select>
+      <div class="grid2 tight">
+        <div><label>Shortest clip (s)</label><input id="s-min" type="number"></div>
+        <div><label>Longest clip (s)</label><input id="s-max" type="number"></div>
+        <div><label>Clips per video</label><input id="s-maxclips" type="number"></div>
+        <div><label>Hook text shows for (s)</label><input id="s-hooksec" type="number" step="0.5"></div>
+      </div>
+      <h2>Smart mode (optional)</h2>
+      <p class="hint">Add your own Claude API key to let Claude re-rank moments and write hooks. Only the transcript text is sent, never the video. Leave empty to stay 100% free and local.</p>
+      <label>Claude API key</label><div class="row"><input id="s-key" type="password" placeholder="sk-ant-..."><button class="ghost" id="s-test">Test</button></div>
+      <label>Model</label><input id="s-model">
+      <label class="check"><input type="checkbox" id="s-useclaude"> Use smart mode when a key is set</label>
+      <h2>Look of the clips</h2>
+      <label class="check"><input type="checkbox" id="s-random"> Randomise caption style per clip</label>
+      <div id="s-styles" class="checks"></div>
+      <label>Export speed</label><select id="s-preset"><option value="ultrafast">Fastest</option><option value="veryfast">Fast (recommended)</option><option value="medium">Best quality (slower)</option></select>
+      <label>Blur stream chat / pop-ups (areas as x,y,w,h fractions, one per line)</label>
+      <textarea id="s-clutter" rows="2" placeholder="0.78,0.25,0.22,0.75"></textarea>
+      <h2>Folders &amp; alerts</h2>
+      <label>Drop folder</label><input id="s-drop">
+      <label class="check"><input type="checkbox" id="s-watchdrop"> Automatically process new files in the drop folder</label>
+      <label class="check"><input type="checkbox" id="s-notify"> Windows desktop notifications</label>
+    </div>
+    <div class="card">
+      <h2>GTA 6 mode</h2>
+      <label>On-screen text reader (OCR)</label>
+      <select id="s-ocr"><option value="auto">Auto</option><option value="rapidocr">RapidOCR (built in)</option><option value="tesseract">Tesseract (if installed)</option><option value="off">Off</option></select>
+      <label>Phrases to look for (edit freely: the game's real words may differ)</label>
+      <textarea id="s-phrases" rows="8" class="mono"></textarea>
+      <label>Screen areas to read (name: x,y,w,h as fractions of the screen)</label>
+      <textarea id="s-regions" rows="3" class="mono"></textarea>
+      <label>Wanted-level area (x,y,w,h)</label><input id="s-wanted" class="mono">
+      <label>HUD areas to hide (minimap etc.), one per line</label>
+      <textarea id="s-hud" rows="2" class="mono"></textarea>
+      <label class="check"><input type="checkbox" id="s-hidehud"> Blur the HUD / minimap in clips</label>
+      <label class="check"><input type="checkbox" id="s-skipquiet"> Skip long quiet driving stretches (faster)</label>
+      <h2>What it has learned</h2>
+      <p class="hint">Approve clips or mark good moments (Process ▸ a finished video ▸ "Mark a good moment") and Clip HQ adjusts what it looks for.</p>
+      <div id="s-learned" class="mono small"></div>
+      <button class="ghost small" id="s-reset-learn">Forget what it learned</button>
+      <div class="row" style="margin-top:20px"><button class="primary big" id="s-save">Save settings</button></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<!-- modals -->
+<div class="modal" id="m-browse"><div class="box">
+  <div class="row between"><h2>Pick a video</h2><button class="ghost small" data-close>✕</button></div>
+  <div class="row"><input id="b-path"><button class="ghost" id="b-up">⬆ Up</button></div>
+  <div id="b-list" class="browse"></div>
+  <div class="row"><button class="ghost" id="b-folder">Use this whole folder</button></div>
+</div></div>
+
+<div class="modal" id="m-edit"><div class="box wide">
+  <div class="row between"><h2 id="e-title">Edit clip</h2><button class="ghost small" data-close>✕</button></div>
+  <div class="editor">
+    <div class="ed-left">
+      <video id="e-video" controls playsinline loop></video>
+      <div id="e-state" class="hint"></div>
+    </div>
+    <div class="ed-right">
+      <div class="score-line"><span class="score" id="e-score"></span><span id="e-reason" class="hint"></span></div>
+      <label>Hook text (top of screen, first few seconds)</label><input id="e-hook">
+      <label>More text later in the clip</label>
+      <div id="e-extras"></div><button class="ghost small" id="e-add-extra">+ Add text</button>
+      <div class="grid2 tight">
+        <div><label>Start (s in video)</label><div class="row"><button class="ghost small" data-nudge="start,-1">−1</button><input id="e-start" type="number" step="0.1"><button class="ghost small" data-nudge="start,1">+1</button></div></div>
+        <div><label>End</label><div class="row"><button class="ghost small" data-nudge="end,-1">−1</button><input id="e-end" type="number" step="0.1"><button class="ghost small" data-nudge="end,1">+1</button></div></div>
+        <div><label>Layout</label><select id="e-layout"></select></div>
+        <div><label>Caption style</label><select id="e-style"></select></div>
+        <div><label>Hook colours</label><select id="e-hookstyle"></select></div>
+        <div><label>Caption height</label><input id="e-capy" type="range" min="0.35" max="0.72" step="0.01"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="e-captions"> Show captions</label>
+      <details id="e-facecam-wrap"><summary>Facecam box (for the stacked layout)</summary>
+        <p class="hint">Drag on the picture to draw around the streamer's camera.</p>
+        <div class="fc-wrap"><img id="e-frame"><div id="e-fcbox"></div></div>
+      </details>
+      <div class="row"><button class="primary" id="e-render">Save &amp; re-render</button><button class="ghost" id="e-shuffle">🎲 New style</button><button class="ghost" id="e-example">⭐ Great moment (teach it)</button></div>
+      <hr>
+      <label>Campaign</label><select id="e-campaign"></select>
+      <label>Title <span class="hint" id="e-title-len"></span></label><input id="e-titletext">
+      <label>Description</label><textarea id="e-desc" rows="5"></textarea>
+      <div id="e-checklist"></div>
+      <div class="row"><button class="ghost" id="e-savetext">Save text</button><button class="ok" id="e-approve">✓ Approve</button><button class="danger" id="e-delete">Delete</button></div>
+    </div>
+  </div>
+</div></div>
+
+<div class="modal" id="m-example"><div class="box">
+  <div class="row between"><h2>Mark a good moment</h2><button class="ghost small" data-close>✕</button></div>
+  <p class="hint">Type the time of a great moment in this video (e.g. 12:40). Clip HQ will learn what it looks and sounds like.</p>
+  <div class="row"><input id="x-time" placeholder="12:40"><select id="x-label"><option>chase</option><option>crash</option><option>fail</option><option>funny</option><option>glitch</option><option>death screen</option><option>mission</option><option>reaction</option></select><button class="primary" id="x-save">Teach it</button></div>
+  <div id="x-msg" class="hint"></div>
+</div></div>
+
+<div id="toasts"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

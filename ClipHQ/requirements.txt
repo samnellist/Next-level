@@ -1,0 +1,16 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+faster-whisper>=1.1
+opencv-python-headless>=4.9,<5
+numpy>=1.26
+httpx>=0.27
+cryptography>=42
+soundcard>=0.4.3
+# OCR (rapidocr-onnxruntime is installed separately with --no-deps so it doesn't pull in a 2nd OpenCV)
+onnxruntime>=1.17
+pyclipper>=1.3
+shapely>=2.0
+Pillow>=10
+PyYAML>=6
+six>=1.16

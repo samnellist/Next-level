@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+bin/
+models/*
+!models/face_detection_yunet_2023mar.onnx
+input/*
+!input/drop/
+input/drop/*
+!input/drop/.keep
+clips/*
+!clips/.keep
+approved/*
+!approved/.keep
+data/

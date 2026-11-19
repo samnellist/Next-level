@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Clip HQ">
+<meta name="theme-color" content="#0e0f13">
+<title>Clip HQ</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23ff3d5a'/%3E%3Cpath d='M38 28 L74 50 L38 72 Z' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body{padding-bottom:40px}
+  header{padding-top:max(10px,env(safe-area-inset-top))}
+  main{padding:12px}
+  .seg{display:flex;gap:6px;margin:6px 0 12px}
+  .seg button{flex:1}
+  .seg button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .pc{background:var(--panel);border:1px solid var(--line);border-radius:16px;margin-bottom:16px;overflow:hidden}
+  .pc video{width:100%;aspect-ratio:9/16;max-height:70vh;background:#000;display:block}
+  .pc .in{padding:12px}
+  .pc .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .pc .btns button,.pc .btns a button{width:100%;padding:12px 8px}
+  .banner{background:var(--accent);color:#fff;padding:10px 12px;border-radius:12px;margin-bottom:12px;font-weight:600;display:none}
+  .banner.show{display:block}
+  .warn{background:#3a2a10;border:1px solid #6b4c12;padding:12px;border-radius:12px;font-size:14px;margin-bottom:12px}
+  .upl{background:var(--panel);border:1px dashed var(--line);border-radius:16px;padding:16px;margin-bottom:16px}
+  input[type=file]{padding:12px}
+  .small-q{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header><div class="brand"><span class="logo">▶</span> Clip HQ</div><div class="right" id="st"></div></header>
+<main>
+  <div class="banner" id="banner"></div>
+  <div class="warn" id="https-warn" style="display:none">
+    <b>To use "Save to Photos" (one-time setup):</b>
+    <ol style="padding-left:18px;margin:8px 0">
+      <li><a href="/cliphq-ca.crt">Tap here to download the Clip HQ certificate</a>, then tap <b>Allow</b>.</li>
+      <li>Open <b>Settings → General → VPN &amp; Device Management</b> → "Clip HQ Local CA" → <b>Install</b>.</li>
+      <li>Open <b>Settings → General → About → Certificate Trust Settings</b> and switch on "Clip HQ Local CA".</li>
+      <li>Then open <a id="https-link" href="#">the secure link</a> and add it to your Home Screen.</li>
+    </ol>
+    <span class="small-q">Until then you can still use Download (then tap Share → Save Video).</span>
+  </div>
+
+  <div class="upl">
+    <b>Send a video to Clip HQ</b>
+    <div class="small-q">iPhone screen recordings go straight to the laptop over Wi-Fi.</div>
+    <input type="file" id="file" accept="video/*" multiple>
+    <div class="row" style="margin-top:6px"><select id="preset"><option value="gta6">GTA 6 streamer</option><option value="general">Talking / IRL</option><option value="gaming">Other gaming</option></select>
+      <select id="campaign"><option value="">No campaign</option></select></div>
+    <label class="check"><input type="checkbox" id="scout"> Scout only (recorded at 2x speed)</label>
+    <button class="primary big" id="up-btn" style="width:100%;margin-top:8px">Upload &amp; make clips</button>
+    <div class="bar" id="up-bar" style="display:none"><i style="width:0"></i></div>
+    <div class="small-q" id="up-msg"></div>
+  </div>
+
+  <div class="seg"><button data-f="ready" class="active">To review</button><button data-f="approved">Approved</button><button data-f="queue">Queue</button></div>
+  <div id="list"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let filter = "ready", lastEvent = null, blobs = {};
+async function api(p, o = {}) { const r = await fetch(p, {...o, headers: {"Content-Type": "application/json"}}); const d = await r.json().catch(() => null); if (!r.ok) throw new Error(d?.detail || r.statusText); return d; }
+
+if (!window.isSecureContext) {
+  $("#https-warn").style.display = "block";
+  $("#https-link").href = `https://${location.hostname}:8443/m`;
+}
+document.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".seg button").forEach(x => x.classList.toggle("active", x === b)); filter = b.dataset.f; load(); });
+
+async function load() {
+  const el = $("#list");
+  if (filter === "queue") {
+    const s = await api("/api/status");
+    el.innerHTML = s.videos.map(v => `<div class="qitem"><b>${esc(v.name)}</b> <span class="status ${v.status}">${v.status}</span>
+      ${v.status === "working" ? `<div class="bar"><i style="width:${Math.round(v.progress * 100)}%"></i></div>` : ""}
+      <div class="small-q">${esc(v.stage || "")}</div></div>`).join("") || `<div class="empty">Queue is empty.</div>`;
+    return;
+  }
+  const clips = await api("/api/clips?status=" + (filter === "ready" ? "ready" : "approved"));
+  el.innerHTML = clips.map(c => `<div class="pc">
+    <video src="${c.approved_url || c.url}" poster="${c.thumb_url}" controls playsinline preload="none"></video>
+    <div class="in">
+      <div class="row between"><b>${esc(c.hook)}</b><span class="score">${c.score}</span></div>
+      <div class="small-q">${esc(c.reason)}</div>
+      <div class="small-q" style="margin-top:6px">${esc(c.title)}</div>
+      <div class="btns">
+        <button class="primary" onclick="saveToPhotos(${c.id}, this)">📲 Save to Photos</button>
+        <a href="/api/download/${c.id}" download><button>⬇ Download</button></a>
+        <button onclick="copy(${c.id}, 'title')">Copy title</button>
+        <button onclick="copy(${c.id}, 'description')">Copy description</button>
+        ${c.status !== "approved" ? `<button class="ok" onclick="approve(${c.id})">✓ Approve</button><button class="danger" onclick="del(${c.id})">Delete</button>` : ""}
+      </div>
+    </div></div>`).join("") || `<div class="empty">${filter === "ready" ? "No clips waiting. Upload a video above." : "Nothing approved yet."}</div>`;
+  window._clips = Object.fromEntries(clips.map(c => [c.id, c]));
+}
+window.copy = (id, k) => { navigator.clipboard.writeText(window._clips[id][k]).then(() => flash("Copied " + k)); };
+window.approve = async id => { await api(`/api/clips/${id}/approve`, {method: "POST"}); flash("Approved"); load(); };
+window.del = async id => { if (confirm("Delete this clip?")) { await api(`/api/clips/${id}/delete`, {method: "POST"}); load(); } };
+
+// iPhone needs the video file ready before the share menu opens, so: tap 1 = prepare, tap 2 = share.
+window.saveToPhotos = async (id, btn) => {
+  if (!navigator.share || !window.isSecureContext) { flash("Use Download, then Share → Save Video (or do the one-time setup above)"); return; }
+  if (!blobs[id]) {
+    btn.textContent = "Preparing…"; btn.disabled = true;
+    try {
+      const r = await fetch(`/api/download/${id}`); const b = await r.blob();
+      blobs[id] = new File([b], `clip_${id}.mp4`, {type: "video/mp4"});
+      btn.textContent = "📲 Tap again to save"; btn.disabled = false;
+    } catch (e) { btn.textContent = "📲 Save to Photos"; btn.disabled = false; flash("Couldn't load the video"); }
+    return;
+  }
+  const f = blobs[id];
+  if (navigator.canShare && !navigator.canShare({files: [f]})) { flash("This phone can't share files from the browser. Use Download."); return; }
+  try { await navigator.share({files: [f], title: window._clips[id]?.title || "Clip"}); btn.textContent = "✓ Shared"; }
+  catch (e) { if (e.name !== "AbortError") flash("Share failed: " + e.message); }
+};
+
+$("#up-btn").onclick = async () => {
+  const files = [...$("#file").files];
+  if (!files.length) return flash("Choose a video first");
+  for (const f of files) await uploadOne(f);
+  $("#file").value = ""; filter = "queue"; document.querySelector('[data-f=queue]').click();
+};
+function uploadOne(f) {
+  return new Promise(res => {
+    const fd = new FormData();
+    fd.append("file", f); fd.append("preset", $("#preset").value); fd.append("campaign_id", $("#campaign").value);
+    fd.append("scout", $("#scout").checked ? "1" : "0");
+    const x = new XMLHttpRequest();
+    $("#up-bar").style.display = "block";
+    x.upload.onprogress = e => { if (e.lengthComputable) { $("#up-bar i").style.width = (e.loaded / e.total * 100) + "%"; $("#up-msg").textContent = `Uploading ${f.name}: ${Math.round(e.loaded / e.total * 100)}%`; } };
+    x.onload = () => { $("#up-msg").textContent = x.status === 200 ? `✓ ${f.name} sent. Clips will appear here when ready.` : "Upload failed: " + x.responseText; res(); };
+    x.onerror = () => { $("#up-msg").textContent = "Upload failed. Is the laptop on and Clip HQ open?"; res(); };
+    x.open("POST", "/api/upload"); x.send(fd);
+  });
+}
+function flash(msg) { const b = $("#banner"); b.textContent = msg; b.classList.add("show"); clearTimeout(window._ft); window._ft = setTimeout(() => b.classList.remove("show"), 4000); }
+
+async function poll() {
+  try {
+    const s = await api("/api/status?since=" + (lastEvent ?? 0));
+    if (lastEvent !== null) {
+      const fresh = s.events.filter(e => e.id > lastEvent && ["clips", "upload"].includes(e.kind));
+      if (fresh.length) { flash("🔔 " + fresh[0].message); if (navigator.vibrate) navigator.vibrate(200); if (filter !== "queue") load(); }
+    }
+    lastEvent = s.last_event;
+    const w = s.videos.find(v => v.status === "working");
+    $("#st").textContent = (s.recorder.recording ? "● REC " : "") + (w ? `⚙ ${w.stage}` : `${s.counts.ready || 0} to review`);
+    if (filter === "queue") load();
+  } catch (e) { $("#st").textContent = "⚠ offline"; }
+}
+api("/api/campaigns").then(cs => cs.forEach(c => $("#campaign").insertAdjacentHTML("beforeend", `<option value="${c.id}">${esc(c.name)}</option>`)));
+load(); poll(); setInterval(poll, 4000);
+</script>
+</body>
+</html>
