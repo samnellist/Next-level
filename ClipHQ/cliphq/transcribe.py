@@ -11,6 +11,17 @@ from .config import MODELS_DIR, pick_whisper_model
 
 _models: dict = {}
 _mlock = threading.Lock()
+_force_cpu = False
+
+
+def has_gpu() -> bool:
+    if _force_cpu:
+        return False
+    try:
+        import ctranslate2
+        return ctranslate2.get_cuda_device_count() > 0
+    except Exception:
+        return False
 
 
 def get_model(name: str, threads: int = 0):
@@ -18,13 +29,36 @@ def get_model(name: str, threads: int = 0):
     with _mlock:
         if name not in _models:
             _models.clear()  # keep only one model in memory (16 GB laptop)
-            _models[name] = WhisperModel(name, device="cpu", compute_type="int8",
-                                         cpu_threads=threads or (os.cpu_count() or 4),
-                                         download_root=str(MODELS_DIR))
+            model = None
+            if has_gpu():  # e.g. Google Colab's free graphics card: much faster
+                try:
+                    model = WhisperModel(name, device="cuda", compute_type="float16", download_root=str(MODELS_DIR))
+                except Exception:
+                    model = None
+            if model is None:
+                model = WhisperModel(name, device="cpu", compute_type="int8",
+                                     cpu_threads=threads or (os.cpu_count() or 4),
+                                     download_root=str(MODELS_DIR))
+            _models[name] = model
         return _models[name]
 
 
-def transcribe(audio: np.ndarray, sr: int = 16000, model_name: str = "auto", chunk_minutes: int = 10,
+def transcribe(audio: np.ndarray, *args, **kwargs) -> dict:
+    """Transcribe, falling back to the normal processor if the graphics card fails."""
+    global _force_cpu
+    try:
+        return _transcribe(audio, *args, **kwargs)
+    except Exception as e:
+        msg = str(e).lower()
+        if has_gpu() and any(k in msg for k in ("cuda", "cudnn", "cublas", "gpu")):
+            _force_cpu = True
+            with _mlock:
+                _models.clear()
+            return _transcribe(audio, *args, **kwargs)
+        raise
+
+
+def _transcribe(audio: np.ndarray, sr: int = 16000, model_name: str = "auto", chunk_minutes: int = 10,
                keep: list[tuple[float, float]] | None = None, threads: int = 0,
                progress: Callable[[float], None] | None = None, duration_hint: float = 0) -> dict:
     """Returns {"words": [{"w","s","e","p"}], "segments": [{"s","e","text"}], "model": name}.
@@ -33,7 +67,9 @@ def transcribe(audio: np.ndarray, sr: int = 16000, model_name: str = "auto", chu
     (used by the fast GTA skim to skip long stretches of quiet driving).
     """
     name = pick_whisper_model(model_name)
-    if model_name == "auto" and duration_hint > 90 * 60 and name == "small.en":
+    if model_name == "auto" and has_gpu():
+        name = "small.en"  # a graphics card makes the more accurate model fast too
+    elif model_name == "auto" and duration_hint > 90 * 60 and name == "small.en":
         name = "base.en"  # very long streams: favour speed
     model = get_model(name, threads)
     total = len(audio) / sr

@@ -164,6 +164,32 @@ If you have your own **Claude API key**, paste it in **Settings → Smart mode**
 Claude then re-ranks the moments and writes hooks and titles. Only the **transcript text** is sent, never the video.
 It costs a few cents per video on your Anthropic account. Without a key, everything still works for free.
 
+## Can't install programs on your laptop? Use the Google Colab version
+
+If your laptop is managed by a school or workplace and won't run downloaded programs ("Access is denied"),
+you can run Clip HQ on Google's computers instead, from a normal web page. Nothing is installed on the laptop.
+Use a **personal** Google account.
+
+**One-time setup**
+1. Go to **drive.google.com**, make a folder called **ClipHQ** in *My Drive*, and a folder called **input** inside it.
+2. Upload **ClipHQ.zip** into the **ClipHQ** folder (not into input).
+3. Go to **colab.research.google.com** → **File → Upload notebook** → choose **ClipHQ_Colab.ipynb**
+   (it's inside the ClipHQ folder you extracted, or I sent it to you). Colab saves it in your Drive for next time.
+
+**Every time**
+1. Put videos into **My Drive → ClipHQ → input** (the iPhone Google Drive app works: **+ → Upload**).
+2. Open the notebook in Colab and press ▶ on **Step 1** (allow Google Drive access when asked).
+3. Press ▶ on **Step 3: Make clips**. Clips appear in **My Drive → ClipHQ → clips**, best first, each with a
+   .txt holding the title, description and checklist.
+4. Optional: **Step 4** edits a clip (hook, trim, layout, style, extra text), **Step 5** approves it.
+5. On iPhone: Google Drive app → open a clip → **⋮ → Send a copy → Save Video** puts it in your camera roll.
+
+**What's different from the full app:** no built-in screen recorder (use your iPhone's or Windows' own
+screen recorder), no automatic alerts (run the channel-watcher step to check), and you edit clips with
+form boxes instead of the Review page. Everything that finds, frames, captions and scores clips is the same.
+Free Colab sessions stop after a while; just run Step 1 again. **Runtime → Change runtime type → T4 GPU**
+makes it much faster when Google has a free graphics card available.
+
 ## Folders
 
 | Folder | What's in it |
