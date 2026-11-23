@@ -1,0 +1,14 @@
+# big video files and work-in-progress stay on your computer
+inbox/*
+!inbox/.gitkeep
+work/*
+!work/.gitkeep
+out/*
+!out/.gitkeep
+# live dashboard data (rebuilt by tools/hq.py)
+status.json
+hq_data.js
+*.tmp
+.venv/
+__pycache__/
+.DS_Store
