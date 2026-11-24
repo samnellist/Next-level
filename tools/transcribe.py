@@ -72,8 +72,17 @@ def main():
         json.dump({"source": a.video, "model": a.model, "language": info.language,
                    "duration": round(total, 2), "segments": out}, f)
     with open(os.path.join(a.workdir, "transcript.txt"), "w", encoding="utf-8") as f:
-        for s in out:
-            f.write(f"[{fmt(s['start'])}] {s['text']}\n")
+        # one line per burst of speech, stamped with its FIRST WORD's time
+        # (Whisper segments can hide long pauses, which made times look early)
+        line, last = [], None
+        for w, st, en in (w for s in out for w in s["words"]):
+            if line and st - last > 1.5:
+                f.write(f"[{fmt(line[0][1])}] {' '.join(x[0] for x in line)}\n")
+                line = []
+            line.append((w, st))
+            last = en
+        if line:
+            f.write(f"[{fmt(line[0][1])}] {' '.join(x[0] for x in line)}\n")
     n_words = sum(len(s["words"]) for s in out)
     mins = (time.time() - t0) / 60
     hq.set_status("transcript", "done", f"{n_words} words transcribed in {mins:.0f} min")
